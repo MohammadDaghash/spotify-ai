@@ -1,2 +1,24 @@
-Spotify AI is a React-based web application that recreates core Spotify features while enhancing the user experience with AI-powered music insights.
-The project integrates the Spotify Web API for real  data and combines it with LLM-based AI features to provide smart recommendations and artist insights
+## Project Status
+
+Spotify app creation is currently unavailable.
+Spotify API authentication will be completed once new app creation is re-enabled.
+
+## Features
+
+- Dashboard displaying user library (mocked)
+- Artist page with albums and tracks
+- Interactive album cards
+- AI-powered artist insights using LLMs
+- Spotify authentication and API integration (structure ready)
+
+## Tech Stack
+
+- React + Vite
+- Tailwind CSS
+- Spotify Web API
+- OpenAI API
+- Node.js / Express (server)
+
+## Credits
+
+Base project adapted from a template by Rizik, with significant customization and additional features.
