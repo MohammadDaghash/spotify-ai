@@ -1,5 +1,5 @@
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-const REDIRECT_URI =import.meta.env.VITE_SPOTIFY_REDIRECT_URI
+const REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI;
 const SCOPES = [
   "user-read-private",
   "user-read-email",
@@ -24,22 +24,24 @@ export function generateCodeVerifier(length = 128) {
   return verifier;
 }
 
-
 export async function generateCodeChallenge(codeVerifier) {
   const encoder = new TextEncoder();
   const data = encoder.encode(codeVerifier);
   const digest = await crypto.subtle.digest("SHA-256", data);
 
-  return btoa(
-    String.fromCharCode(...new Uint8Array(digest))
-  )
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
-export async function redirectToSpotifyLogin() {
+if (!CLIENT_ID || !REDIRECT_URI) {
+  throw new Error(
+    "Missing VITE_SPOTIFY_CLIENT_ID or VITE_SPOTIFY_REDIRECT_URI"
+  );
+}
 
+export async function redirectToSpotifyLogin() {
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
   sessionStorage.setItem("spotify_code_verifier", codeVerifier);

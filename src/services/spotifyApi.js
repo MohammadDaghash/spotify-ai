@@ -14,4 +14,15 @@ spotifyApi.interceptors.request.use((config) => {
   return config;
 });
 
+spotifyApi.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem("spotify_access_token");
+      window.location.href = "/login";
+    }
+    return Promise.reject(err);
+  }
+);
+
 export default spotifyApi;

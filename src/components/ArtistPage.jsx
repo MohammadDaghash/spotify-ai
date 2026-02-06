@@ -1,121 +1,84 @@
+// src/components/ArtistPage.jsx
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import useSpotify from "../hooks/useSpotify";
-import { fetchTopSongsBySinger } from "../services/IntegratingAiAPI";
+import { useSpotifyContext } from "../context/SpotifyContext.jsx";
+import AlbumCard from "./AlbumCard.jsx";
 
 export default function ArtistPage() {
-  const [isFlipped, setIsFlipped] = useState(false);
   const { id } = useParams();
-  const { getArtist, getArtistAlbums } = useSpotify();
-  const [aiSongs, setAiSongs] = useState([]);
+  const { getArtist, getArtistAlbums } = useSpotifyContext();
+
   const [artist, setArtist] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [albums, setAlbums] = useState([]);
-  const [isFetched,setIsFetched]=useState(false)
-
-  const handleFlipImg = () => {
-    setIsFlipped((prev) => !prev);
-  };
-
-  const handleFetchMusic = async () => {
-    const songs = await fetchTopSongsBySinger(artist.name);
-    const arrOfsongs = songs
-      .split("\n") 
-      .map((line) => line.replace("- ", "").trim());
-    setAiSongs(arrOfsongs);
-  };
-
-  const handleImgEvent = () => {
-    if(aiSongs.length===0 && !isFetched){
-        handleFetchMusic()
-        setIsFetched(true)
-    }
-  };
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchArtist() {
+    let cancelled = false;
+
+    async function load() {
       try {
-        const res = await getArtist(id);
-        setArtist(res.data);
-        const albumsRes = await getArtistAlbums(id);
-        setAlbums(albumsRes);
+        setLoading(true);
+
+        const [artistRes, albumsRes] = await Promise.all([
+          getArtist(id),
+          getArtistAlbums(id),
+        ]);
+
+        // Support either (axios response) or (raw data) from context
+        const artistData = artistRes?.data ?? artistRes;
+        const albumsData = albumsRes?.data?.items ?? albumsRes; // also supports axios shape
+
+        if (!cancelled) {
+          setArtist(artistData || null);
+          setAlbums(Array.isArray(albumsData) ? albumsData : []);
+        }
       } catch (err) {
         console.error("Failed to fetch artist", err);
+        if (!cancelled) {
+          setArtist(null);
+          setAlbums([]);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-    fetchArtist();
-  }, [id]);
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, getArtist, getArtistAlbums]);
 
   if (loading) return <div className="text-white p-8">Loading...</div>;
-  if (!artist) return null;
+  if (!artist) return <div className="text-white p-8">Artist not found.</div>;
+
+  const artistImg = artist.images?.[0]?.url;
 
   return (
     <div className="min-h-screen bg-[#121212] text-white">
       {/* HEADER */}
       <div
         className="h-100 flex items-end p-8"
-        style={{
-          background: "linear-gradient(180deg, #b91c1c, #000)",
-        }}
+        style={{ background: "linear-gradient(180deg, #b91c1c, #000)" }}
       >
-        <div
-          className="relative w-52 h-52 cursor-pointer"
-          style={{ perspective: "1000px" }}
-          onClick={handleFlipImg}
-        >
-          <div
-            className="absolute inset-0 transition-transform duration-500"
-            style={{
-              transformStyle: "preserve-3d",
-              transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
-            }}
-          >
-            {/* FRONT (IMAGE) */}
-            <div
-              className="absolute inset-0"
-              style={{ backfaceVisibility: "hidden" }}
-            >
-              <img
-                src={artist.images?.[0]?.url}
-                alt={artist.name}
-                className="w-full h-full rounded-full object-cover"
-                onMouseEnter={handleImgEvent}
-              />
-            </div>
-
-            {/* BACK */}
-            <div
-              className="absolute inset-0  flex items-center justify-center
-                 bg-gradient-to-br from-zinc-900 to-zinc-700
-                 shadow-2xl overflow-hidden"
-              style={{
-                backfaceVisibility: "hidden",
-                transform: "rotateY(180deg)",
-              }}
-            >
-              <div className="text-center space-y-1 text-xs">
-                <p>Top 10 songs:</p>
-                {aiSongs.length > 0 ? (
-                  <ul className="text-left">
-                    {aiSongs.map((song,index)=>
-                     <li key={index}>• {song}</li>
-                    )}
-                  </ul>
-                ) : (
-                  <div>Nothing</div>
-                )}
-              </div>
-            </div>
+        {artistImg ? (
+          <img
+            src={artistImg}
+            alt={artist.name}
+            className="w-52 h-52 rounded-full object-cover shadow-xl"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-52 h-52 rounded-full bg-zinc-800 shadow-xl flex items-center justify-center text-zinc-300">
+            No image
           </div>
-        </div>
+        )}
 
         <div className="ml-20">
           <p className="uppercase text-sm text-gray-300">Artist</p>
           <h1 className="text-6xl font-bold">{artist.name}</h1>
           <p className="text-sm text-gray-300 mt-2">
-            {artist.followers.total.toLocaleString()} followers
+            {(artist.followers?.total ?? 0).toLocaleString()} followers
           </p>
         </div>
       </div>
@@ -124,33 +87,23 @@ export default function ArtistPage() {
       <div className="px-8 mt-10">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">More by {artist.name}</h2>
-
           <span className="text-sm text-gray-400 hover:underline cursor-pointer">
             See discography
           </span>
         </div>
 
-        <div className="flex gap-5 overflow-x-auto pb-4">
-          {albums.map((album) => (
-            <div
-              key={album.id}
-              className="min-w-[180px] hover:bg-[#1a1a1a] p-3 rounded-lg cursor-pointer"
-            >
-              <img
-                src={album.images?.[0]?.url}
-                alt={album.name}
-                className="w-full h-44 object-cover rounded-md"
+        <div className="flex gap-5 overflow-x-auto pb-6">
+          {albums.length ? (
+            albums.map((album) => (
+              <AlbumCard
+                key={album.id}
+                album={album}
+                artistName={artist.name}
               />
-
-              <p className="mt-2 text-sm font-semibold truncate">
-                {album.name}
-              </p>
-
-              <p className="text-xs text-gray-400">
-                {album.release_date.slice(0, 4)}
-              </p>
-            </div>
-          ))}
+            ))
+          ) : (
+            <div className="text-sm text-gray-400">No albums found.</div>
+          )}
         </div>
       </div>
     </div>

@@ -1,22 +1,20 @@
-import React, { useState } from "react";
+// src/pages/Dashboard.jsx (update - replace useSpotify with context)
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import Header from "../components/layout/Header.jsx";
 import Section from "../components/layout/Section.jsx";
 import TrackCard from "../components/cards/TrackCard.jsx";
-import useSpotify from "../hooks/useSpotify.js";
-
+import { useSpotifyContext } from "../context/SpotifyContext.jsx";
 
 function Dashboard() {
+  const { tracks, playlists } = useSpotifyContext();
 
-const { tracks, loading , playlists} = useSpotify();
-  
   return (
     <div className="h-screen bg-black flex flex-col">
       <TopBar />
 
       <div className="flex flex-1">
-        <Sidebar playlists={playlists}/>
+        <Sidebar playlists={playlists} />
 
         <main className="flex-1 bg-[#121212] rounded-lg m-2 overflow-hidden">
           <div className="p-6 text-white overflow-y-auto h-full">

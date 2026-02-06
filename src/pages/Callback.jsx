@@ -60,8 +60,6 @@ function Callback({ setIsLoggedIn }) {
         sessionStorage.removeItem("spotify_code_verifier");
 
         setIsLoggedIn(true);
-        window.history.replaceState({}, document.title, "/callback");
-        navigate("/dashboard", { replace: true });
       } catch (err) {
         console.error("Token exchange failed", err);
         navigate("/login", { replace: true });
