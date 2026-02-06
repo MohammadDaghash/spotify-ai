@@ -22,3 +22,16 @@ Spotify API authentication will be completed once new app creation is re-enabled
 ## Credits
 
 Base project adapted from a template by Rizik, with significant customization and additional features.
+
+## How to Run
+
+1. Install dependencies:
+   npm install
+
+2. Start the client:
+   npm run dev
+
+3. (Optional) Start the server:
+   cd server
+   npm install
+   npm start
