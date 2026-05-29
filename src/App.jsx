@@ -1,46 +1,27 @@
-import React, { useState,useEffect} from "react";
+// src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
+
 import Dashboard from "./pages/Dashboard.jsx";
 import Login from "./pages/Login.jsx";
 import Callback from "./pages/Callback.jsx";
 import ArtistPage from "./components/ArtistPage.jsx";
 
-function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  useEffect(() => {
-  const token = localStorage.getItem("spotify_access_token");
-  const expiresAt = localStorage.getItem("spotify_token_expires_at");
-  
-  if (token && expiresAt && Date.now() < expiresAt) {
-    setIsLoggedIn(true);
-  } else {
-    localStorage.clear();
-    setIsLoggedIn(false);
-  }
-
-  setAuthChecked(true);
-}, []);
-
-  if (!authChecked) {
-    return <div>Checking authentication…</div>;
-  }
+export default function App() {
   return (
     <Routes>
-      
-      <Route path="/" element={isLoggedIn ? <Dashboard /> : <Navigate to="/login" replace />}/>
-      <Route
-        path="/callback"
-        element={<Callback setIsLoggedIn={setIsLoggedIn} />}
-      />
-      <Route path="/login" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <Login />} />
-      <Route
-        path="/dashboard"
-        element={isLoggedIn ? <Dashboard /> : <Navigate to="/login" replace />}
-      />
+      {/* Always show Dashboard in mock mode */}
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+
+      {/* Keep these routes for when Spotify auth is available again */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/callback" element={<Callback />} />
+
+      {/* Artist page */}
       <Route path="/artist/:id" element={<ArtistPage />} />
+
+      {/* Anything else -> home */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
-
-export default App;
