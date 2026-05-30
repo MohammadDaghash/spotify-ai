@@ -1,26 +1,26 @@
+import {
+  buildTrackVector,
+  buildUserTasteVector,
+  cosineSimilarity,
+} from "./vectorEngine.js";
+
 export function calculateRecommendationScore(track, userProfile) {
-  let score = 0;
+  const userVector = buildUserTasteVector(userProfile);
+  const trackVector = buildTrackVector(track);
 
-  if (userProfile.favoriteArtists.includes(track.artistName)) {
-    score += 0.35;
-  }
+  const similarityScore = cosineSimilarity(userVector, trackVector);
 
-  const sharedGenres = track.genres.filter((genre) =>
-    userProfile.favoriteGenres.includes(genre),
-  ).length;
+  const artistAffinity = userProfile.favoriteArtists.includes(track.artistName)
+    ? 1
+    : 0;
 
-  score += sharedGenres * 0.15;
+  const finalScore =
+    similarityScore * 0.55 +
+    artistAffinity * 0.25 +
+    track.popularity * 0.1 +
+    track.recencyScore * 0.1;
 
-  const sharedMoods = track.moods.filter((mood) =>
-    userProfile.favoriteMoods.includes(mood),
-  ).length;
-
-  score += sharedMoods * 0.1;
-
-  score += track.popularity * 0.2;
-  score += track.recencyScore * 0.2;
-
-  return Number(Math.min(score, 1).toFixed(2));
+  return Number(Math.min(finalScore, 1).toFixed(2));
 }
 
 export function generateRecommendationReason(track, userProfile) {
@@ -35,7 +35,7 @@ export function generateRecommendationReason(track, userProfile) {
   );
 
   if (sharedGenres.length > 0) {
-    reasons.push(`genre overlap: ${sharedGenres.join(", ")}`);
+    reasons.push(`genre vector overlap: ${sharedGenres.join(", ")}`);
   }
 
   const sharedMoods = track.moods.filter((mood) =>
@@ -43,7 +43,7 @@ export function generateRecommendationReason(track, userProfile) {
   );
 
   if (sharedMoods.length > 0) {
-    reasons.push(`mood match: ${sharedMoods.join(", ")}`);
+    reasons.push(`mood vector overlap: ${sharedMoods.join(", ")}`);
   }
 
   return `Recommended because of ${reasons.join(" • ")}.`;

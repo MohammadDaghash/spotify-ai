@@ -5,22 +5,26 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Login from "./pages/Login.jsx";
 import Callback from "./pages/Callback.jsx";
 import ArtistPage from "./components/ArtistPage.jsx";
+import Recommendations from "./pages/Recommendations.jsx";
+import Model from "./pages/Model.jsx";
 
 export default function App() {
   return (
     <Routes>
-      {/* Always show Dashboard in mock mode */}
+      {/* Main pages */}
       <Route path="/" element={<Dashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/recommendations" element={<Recommendations />} />
+      <Route path="/model" element={<Model />} />
 
-      {/* Keep these routes for when Spotify auth is available again */}
+      {/* Spotify auth */}
       <Route path="/login" element={<Login />} />
       <Route path="/callback" element={<Callback />} />
 
       {/* Artist page */}
       <Route path="/artist/:id" element={<ArtistPage />} />
 
-      {/* Anything else -> home */}
+      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

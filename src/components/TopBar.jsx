@@ -142,27 +142,7 @@ function TopBar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <button
-          className="text-sm font-semibold bg-white text-black px-4 py-1.5 rounded-full hover:scale-105 transition"
-          type="button"
-        >
-          Explore Premium
-        </button>
-
-        <button
-          className="text-sm text-gray-300 hover:text-white"
-          type="button"
-        >
-          Install App
-        </button>
-
-        <div className="w-8 h-8 bg-[#1f1f1f] rounded-full flex items-center justify-center">
-          <span className="text-sm font-bold">
-            {loading ? "..." : badgeText || "?"}
-          </span>
-        </div>
-      </div>
+      <div className="text-sm text-gray-400">Music Intelligence</div>
     </div>
   );
 }
