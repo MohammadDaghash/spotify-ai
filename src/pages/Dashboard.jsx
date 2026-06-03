@@ -4,7 +4,8 @@ import Sidebar from "../components/Sidebar.jsx";
 import Header from "../components/layout/Header.jsx";
 import Section from "../components/layout/Section.jsx";
 import TrackCard from "../components/cards/TrackCard.jsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getMlDashboardAnalytics } from "../services/mlApi.js";
 import { useSpotifyContext } from "../context/SpotifyContext.jsx";
 import { getRankedRecommendations } from "../utils/recommendationEngine.js";
 import { evaluateRecommendations } from "../utils/evaluationMetrics.js";
@@ -36,17 +37,18 @@ function RankingTable({ title, rows, columns }) {
       <h2 className="text-lg font-bold mb-4">{title}</h2>
 
       <div className="space-y-3">
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <div
-            key={`${title}-${row.rank}-${row.trackName || row.artistName || row.albumName}`}
+            key={`${title}-${index}-${row.name || ""}-${row.artistName || ""}-${row.albumName || ""}`}
             className="grid grid-cols-[40px_1fr_auto] gap-3 items-center border-b border-white/5 pb-3"
           >
-            <span className="text-gray-400">#{row.rank}</span>
+            <span className="text-gray-400">#{index + 1}</span>
 
             <div>
               <p className="font-semibold">
-                {row.trackName || row.albumName || row.artistName}
+                {row.name || row.trackName || row.albumName || row.artistName}
               </p>
+
               <p className="text-xs text-gray-400">
                 {columns
                   .map((col) => row[col])
@@ -55,13 +57,15 @@ function RankingTable({ title, rows, columns }) {
               </p>
             </div>
 
-            <span className="text-sm font-bold text-right">
-              {row.streams} streams
-              <br />
-              <span className="text-xs text-gray-400">
-                {row.minutesPlayed} min
-              </span>
-            </span>
+            <div className="text-right">
+              <p className="font-bold text-white">
+                {row.streams?.toLocaleString()} streams
+              </p>
+
+              <p className="text-xs text-gray-400">
+                {Math.round(row.minutes || 0).toLocaleString()} min
+              </p>
+            </div>
           </div>
         ))}
       </div>
@@ -79,6 +83,42 @@ function Dashboard() {
   const [userTasteProfile, setUserTasteProfile] = useState(demoUserProfile);
   const [selectedYear, setSelectedYear] = useState("all");
   const [sortBy, setSortBy] = useState("minutes");
+
+  const [mlDashboardData, setMlDashboardData] = useState(null);
+  const [mlError, setMlError] = useState("");
+  const [mlLoading, setMlLoading] = useState(false);
+
+  useEffect(() => {
+    let isCurrentRequest = true;
+
+    async function loadMlDashboardData() {
+      try {
+        setMlError("");
+
+        const data = await getMlDashboardAnalytics(
+          sortBy,
+          timeRange,
+          selectedYear,
+        );
+
+        if (isCurrentRequest) {
+          setMlDashboardData(data);
+          console.log("ML backend dashboard data:", data);
+        }
+      } catch (error) {
+        if (isCurrentRequest) {
+          setMlError(error.message);
+          console.error(error);
+        }
+      }
+    }
+
+    loadMlDashboardData();
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [sortBy, timeRange, selectedYear]);
 
   const timeRangeLabel =
     timeRange === "30d"
@@ -159,6 +199,52 @@ function Dashboard() {
     return [...new Set(years)].sort((a, b) => b - a);
   }, []);
 
+  const mlSummary = mlDashboardData?.summary;
+
+  const formatNumber = (value) => {
+    if (value === undefined || value === null) return "—";
+    return Number(value).toLocaleString();
+  };
+
+  const dashboardTotalStreams = mlSummary
+    ? formatNumber(mlSummary.total_streams)
+    : formatNumber(totalStreams);
+
+  const dashboardTotalMinutes = mlSummary
+    ? formatNumber(Math.round(mlSummary.total_minutes))
+    : formatNumber(Math.round(totalMinutes));
+
+  const dashboardTotalArtists = mlSummary
+    ? formatNumber(mlSummary.unique_artists)
+    : formatNumber(libraryArtists.length);
+
+  const dashboardTopTracks = (mlDashboardData?.top_tracks ?? []).map(
+    (track) => ({
+      name: track.track_name,
+      artistName: track.artist_name,
+      albumName: track.album_name,
+      streams: track.streams,
+      minutes: track.minutes,
+    }),
+  );
+
+  const dashboardTopArtists = (mlDashboardData?.top_artists ?? []).map(
+    (artist) => ({
+      name: artist.artist_name,
+      streams: artist.streams,
+      minutes: artist.minutes,
+    }),
+  );
+
+  const dashboardTopAlbums = (mlDashboardData?.top_albums ?? []).map(
+    (album) => ({
+      name: album.album_name,
+      artistName: album.artist_name,
+      streams: album.streams,
+      minutes: album.minutes,
+    }),
+  );
+
   return (
     <div className="h-screen bg-black flex flex-col">
       <TopBar />
@@ -170,6 +256,23 @@ function Dashboard() {
           <div className="p-6 text-white overflow-y-auto h-full">
             <Header />
 
+            <div className="mb-4 bg-[#181818] rounded-lg p-4 border border-white/10">
+              <p className="text-sm text-gray-400">Python ML Backend</p>
+
+              {mlDashboardData ? (
+                <p className="text-green-400 font-semibold">
+                  Connected — {mlDashboardData.summary.total_streams} streams
+                  analyzed by pandas
+                </p>
+              ) : mlError ? (
+                <p className="text-red-400 font-semibold">
+                  Backend error: {mlError}
+                </p>
+              ) : (
+                <p className="text-gray-300">Loading ML backend data...</p>
+              )}
+            </div>
+
             <div className="mb-6 text-sm opacity-70">
               {loading
                 ? "Loading Spotify data…"
@@ -179,23 +282,18 @@ function Dashboard() {
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <StatCard
                 title="Streams analyzed"
-                value={totalStreams}
-                subtitle={timeRangeLabel}
+                value={dashboardTotalStreams}
+                subtitle="From Python/pandas"
               />
               <StatCard
                 title="Minutes played"
-                value={totalMinutes}
+                value={dashboardTotalMinutes}
                 subtitle="Listening-time signal"
               />
               <StatCard
                 title="Artists in library"
-                value={libraryArtists.length}
+                value={dashboardTotalArtists}
                 subtitle="Used for artist affinity"
-              />
-              <StatCard
-                title="Recommendation model"
-                value="V1"
-                subtitle="Content-based direction"
               />
             </section>
 
@@ -286,19 +384,19 @@ function Dashboard() {
             <section className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
               <RankingTable
                 title="Top Songs"
-                rows={parsedSpotifyData.topTracks}
+                rows={dashboardTopTracks}
                 columns={["artistName", "albumName"]}
               />
 
               <RankingTable
                 title="Top Artists"
-                rows={parsedSpotifyData.topArtists}
-                columns={["songsInLibrary"]}
+                rows={dashboardTopArtists}
+                columns={[]}
               />
 
               <RankingTable
                 title="Top Albums"
-                rows={parsedSpotifyData.topAlbums}
+                rows={dashboardTopAlbums}
                 columns={["artistName"]}
               />
             </section>

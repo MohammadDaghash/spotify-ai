@@ -1,0 +1,23 @@
+[
+  {
+    "ts": "2026-01-01T10:00:00Z",
+    "ms_played": 210000,
+    "master_metadata_track_name": "Song A",
+    "master_metadata_album_artist_name": "Artist One",
+    "master_metadata_album_album_name": "Album Alpha"
+  },
+  {
+    "ts": "2026-01-02T12:00:00Z",
+    "ms_played": 180000,
+    "master_metadata_track_name": "Song B",
+    "master_metadata_album_artist_name": "Artist Two",
+    "master_metadata_album_album_name": "Album Beta"
+  },
+  {
+    "ts": "2026-01-03T15:00:00Z",
+    "ms_played": 240000,
+    "master_metadata_track_name": "Song A",
+    "master_metadata_album_artist_name": "Artist One",
+    "master_metadata_album_album_name": "Album Alpha"
+  }
+]
