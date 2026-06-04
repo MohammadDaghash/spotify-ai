@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from services.recommender import (
+    get_artist_recommendations,
+    build_artist_features,
+    get_top_user_artists,
+)
 from services.spotify_parser import (
+    load_spotify_history,
     get_summary,
     get_top_tracks,
     get_top_artists,
@@ -81,4 +87,34 @@ def dashboard_analytics(
         "top_tracks": get_top_tracks(DATA_FILE, limit=20, sort_by=sort_by, time_range=time_range, year=year),
         "top_artists": get_top_artists(DATA_FILE, limit=20, sort_by=sort_by, time_range=time_range, year=year),
         "top_albums": get_top_albums(DATA_FILE, limit=20, sort_by=sort_by, time_range=time_range, year=year),
+    }
+
+@app.get("/recommendations/artists")
+def artist_recommendations():
+    df = load_spotify_history(DATA_FILE)
+
+    return {
+        "recommendations": get_artist_recommendations(df, top_n=5)
+    }
+
+@app.get("/recommendations/artist-features")
+def artist_features():
+    df = load_spotify_history(DATA_FILE)
+    features = build_artist_features(df)
+
+    features = features.sort_values(
+        "listen_strength",
+        ascending=False,
+    ).head(20)
+
+    return {
+        "features": features.to_dict(orient="records")
+    }
+
+@app.get("/recommendations/user-vector-artists")
+def user_vector_artists():
+    df = load_spotify_history(DATA_FILE)
+
+    return {
+        "artists": get_top_user_artists(df, limit=10)
     }

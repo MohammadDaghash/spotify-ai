@@ -1,39 +1,35 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
 const REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI;
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-const TOKEN_ENDPOINT = import.meta.env.VITE_TOKEN_ENDPOINT;
+const TOKEN_ENDPOINT =
+  import.meta.env.VITE_TOKEN_ENDPOINT ||
+  "https://accounts.spotify.com/api/token";
 
-function Callback({ setIsLoggedIn }) {
+function Callback() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const error = params.get("error");
+    async function exchangeToken() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const error = params.get("error");
 
-    if (error) {
-      console.error("Spotify auth error:", error);
-      navigate("/login", { replace: true });
-      return;
-    }
+      if (error || !code) {
+        navigate("/login", { replace: true });
+        return;
+      }
 
-    if (!code) {
-      navigate("/login", { replace: true });
-      return;
-    }
+      const codeVerifier = sessionStorage.getItem("spotify_code_verifier");
 
-    const codeVerifier = sessionStorage.getItem("spotify_code_verifier");
+      if (!codeVerifier) {
+        console.error("Missing code verifier");
+        navigate("/login", { replace: true });
+        return;
+      }
 
-    if (!codeVerifier) {
-      console.error("Missing code verifier");
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    const exchangeToken = async () => {
       try {
         const body = new URLSearchParams({
           grant_type: "authorization_code",
@@ -51,25 +47,33 @@ function Callback({ setIsLoggedIn }) {
 
         const { access_token, expires_in } = res.data;
 
+        if (!access_token) {
+          throw new Error("No access token returned from Spotify");
+        }
+
         localStorage.setItem("spotify_access_token", access_token);
         localStorage.setItem(
           "spotify_token_expires_at",
-          Date.now() + expires_in * 1000
+          String(Date.now() + expires_in * 1000),
         );
 
         sessionStorage.removeItem("spotify_code_verifier");
 
-        setIsLoggedIn(true);
+        navigate("/dashboard", { replace: true });
       } catch (err) {
         console.error("Token exchange failed", err);
         navigate("/login", { replace: true });
       }
-    };
+    }
 
     exchangeToken();
-  }, [navigate, setIsLoggedIn]);
+  }, [navigate]);
 
-  return <div>Logging you in…</div>;
+  return (
+    <div className="h-screen bg-black flex items-center justify-center text-white">
+      Logging you in…
+    </div>
+  );
 }
 
 export default Callback;

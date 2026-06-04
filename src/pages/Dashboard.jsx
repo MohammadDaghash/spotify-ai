@@ -5,7 +5,6 @@ import Header from "../components/layout/Header.jsx";
 import Section from "../components/layout/Section.jsx";
 import TrackCard from "../components/cards/TrackCard.jsx";
 import { useEffect, useMemo, useState } from "react";
-import { getMlDashboardAnalytics } from "../services/mlApi.js";
 import { useSpotifyContext } from "../context/SpotifyContext.jsx";
 import { getRankedRecommendations } from "../utils/recommendationEngine.js";
 import { evaluateRecommendations } from "../utils/evaluationMetrics.js";
@@ -13,6 +12,7 @@ import { allSpotifyHistory } from "../data/loadSpotifyHistory.js";
 import { parseSpotifyHistory } from "../utils/spotifyDataParser.js";
 import ListeningTrendChart from "../components/charts/ListeningTrendChart.jsx";
 import { getListeningTrend } from "../utils/spotifyDataParser.js";
+import { getMlDashboardAnalytics } from "../services/mlApi";
 
 import {
   monthlyTopAlbums,
@@ -410,105 +410,6 @@ function Dashboard() {
                 </>
               )}
             </section>
-
-            <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <StatCard
-                title="Precision@3"
-                value={evaluationMetrics.precisionAtK}
-                subtitle="Relevant songs in top 3"
-              />
-              <StatCard
-                title="Hit@3"
-                value={evaluationMetrics.hitAtK}
-                subtitle="At least one good recommendation"
-              />
-              <StatCard
-                title="Catalog coverage"
-                value={evaluationMetrics.catalogCoverage}
-                subtitle="Recommended catalog share"
-              />
-              <StatCard
-                title="Artist diversity"
-                value={evaluationMetrics.artistDiversity}
-                subtitle="Unique artists in results"
-              />
-            </section>
-
-            <Section title="Recommended songs">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {rankedRecommendations.map((rec) => (
-                  <div
-                    key={`${rec.trackName}-${rec.artistName}`}
-                    className="bg-[#181818] rounded-lg p-4 hover:bg-[#252525] transition"
-                  >
-                    <div className="flex justify-between gap-4">
-                      <div>
-                        <h3 className="font-bold">{rec.trackName}</h3>
-                        <p className="text-sm text-gray-400">
-                          {rec.artistName}
-                        </p>
-                      </div>
-
-                      <span className="text-sm font-bold">
-                        {(rec.score * 100).toFixed(0)}%
-                      </span>
-                    </div>
-
-                    <p className="text-sm text-gray-300 mt-3">{rec.reason}</p>
-
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={() => {
-                          setLikedSongs((prev) => [...prev, rec.trackName]);
-
-                          setUserTasteProfile((prevProfile) => {
-                            const updatedGenres = [
-                              ...new Set([
-                                ...prevProfile.favoriteGenres,
-                                ...rec.genres,
-                              ]),
-                            ];
-
-                            const updatedMoods = [
-                              ...new Set([
-                                ...prevProfile.favoriteMoods,
-                                ...rec.moods,
-                              ]),
-                            ];
-
-                            const updatedArtists = [
-                              ...new Set([
-                                ...prevProfile.favoriteArtists,
-                                rec.artistName,
-                              ]),
-                            ];
-
-                            return {
-                              ...prevProfile,
-                              favoriteGenres: updatedGenres,
-                              favoriteMoods: updatedMoods,
-                              favoriteArtists: updatedArtists,
-                            };
-                          });
-                        }}
-                        className="bg-white text-black text-sm font-semibold px-3 py-1.5 rounded-full"
-                      >
-                        Add to Library
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          setIgnoredSongs((prev) => [...prev, rec.trackName])
-                        }
-                        className="bg-[#2a2a2a] text-white text-sm px-3 py-1.5 rounded-full"
-                      >
-                        Ignore
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
           </div>
         </main>
       </div>

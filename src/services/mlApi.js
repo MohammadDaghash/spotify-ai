@@ -33,3 +33,13 @@ export async function getMlDashboardAnalytics(
 
   return data;
 }
+
+export async function getArtistRecommendations() {
+  const response = await fetch(`${ML_API_BASE_URL}/recommendations/artists`);
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch recommendations");
+  }
+
+  return response.json();
+}
