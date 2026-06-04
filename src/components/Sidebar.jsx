@@ -13,6 +13,10 @@ function Sidebar() {
       path: "/recommendations",
     },
     {
+      label: "Trip Group",
+      path: "/trip",
+    },
+    {
       label: "Model",
       path: "/model",
     },

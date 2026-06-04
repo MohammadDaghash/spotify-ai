@@ -7,6 +7,7 @@ import Callback from "./pages/Callback.jsx";
 import ArtistPage from "./components/ArtistPage.jsx";
 import Recommendations from "./pages/Recommendations.jsx";
 import Model from "./pages/Model.jsx";
+import Trip from "./pages/Trip.jsx";
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
       <Route path="/" element={<Dashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/recommendations" element={<Recommendations />} />
+      <Route path="/trip" element={<Trip />} />
       <Route path="/model" element={<Model />} />
 
       {/* Spotify auth */}

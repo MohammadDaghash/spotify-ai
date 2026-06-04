@@ -1,7 +1,10 @@
 from fastapi import FastAPI
+from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 from services.recommender import (
     get_artist_recommendations,
+    get_track_recommendations,
+    get_trip_playlists,
     build_artist_features,
     get_top_user_artists,
 )
@@ -90,11 +93,54 @@ def dashboard_analytics(
     }
 
 @app.get("/recommendations/artists")
-def artist_recommendations():
+def artist_recommendations(
+    top_n: int = 20,
+    liked_artists: list[str] = Query(default=[]),
+    ignored_artists: list[str] = Query(default=[]),
+):
     df = load_spotify_history(DATA_FILE)
 
     return {
-        "recommendations": get_artist_recommendations(df, top_n=5)
+        "recommendations": get_artist_recommendations(
+            df,
+            top_n=top_n,
+            liked_artists=liked_artists,
+            ignored_artists=ignored_artists,
+        )
+    }
+
+@app.get("/recommendations/tracks")
+def track_recommendations(
+    top_n: int = 20,
+    max_play_count: int = 10,
+    liked_tracks: list[str] = Query(default=[]),
+    ignored_tracks: list[str] = Query(default=[]),
+):
+    df = load_spotify_history(DATA_FILE)
+
+    return {
+        "recommendations": get_track_recommendations(
+            df,
+            top_n=top_n,
+            max_play_count=max_play_count,
+            liked_tracks=liked_tracks,
+            ignored_tracks=ignored_tracks,
+        )
+    }
+
+@app.get("/recommendations/trip-playlists")
+def trip_playlists(
+    limit: int = 25,
+    new_song_max_plays: int = 5,
+):
+    df = load_spotify_history(DATA_FILE)
+
+    return {
+        "playlists": get_trip_playlists(
+            df,
+            limit=limit,
+            new_song_max_plays=new_song_max_plays,
+        )
     }
 
 @app.get("/recommendations/artist-features")

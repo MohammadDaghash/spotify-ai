@@ -52,6 +52,19 @@ export function SpotifyProvider({ children }) {
     return res.data?.artists?.items?.[0] ?? null;
   };
 
+  const searchTrack = async (trackName, artistName) => {
+    const track = (trackName || "").trim();
+    const artist = (artistName || "").trim();
+    if (!track) return null;
+
+    const query = artist ? `track:${track} artist:${artist}` : track;
+    const res = await spotifyApi.get(
+      `/search?q=${encodeURIComponent(query)}&type=track&limit=1`,
+    );
+
+    return res.data?.tracks?.items?.[0] || null;
+  };
+
   const getArtist = async (id) => {
     if (!id) return null;
     const res = await spotifyApi.get(`/artists/${id}`);
@@ -69,6 +82,73 @@ export function SpotifyProvider({ children }) {
   const getFollowedArtists = async () => {
     const res = await spotifyApi.get("/me/following?type=artist&limit=20");
     return res.data?.artists?.items || [];
+  };
+
+  const getLiveListeningSignals = async () => {
+    const [recentlyPlayed, savedTracks, shortTermTop, mediumTermTop, longTermTop] =
+      await Promise.allSettled([
+        spotifyApi.get("/me/player/recently-played?limit=50"),
+        spotifyApi.get("/me/tracks?limit=50"),
+        spotifyApi.get("/me/top/tracks?time_range=short_term&limit=50"),
+        spotifyApi.get("/me/top/tracks?time_range=medium_term&limit=50"),
+        spotifyApi.get("/me/top/tracks?time_range=long_term&limit=50"),
+      ]);
+
+    const getResultData = (result) =>
+      result.status === "fulfilled" ? result.value.data : null;
+
+    const recentlyPlayedTracks =
+      getResultData(recentlyPlayed)?.items?.map((item) => item.track) || [];
+
+    const savedTrackItems = getResultData(savedTracks)?.items || [];
+    const savedTrackList = savedTrackItems.map((item) => item.track);
+
+    const topTrackLists = [shortTermTop, mediumTermTop, longTermTop].flatMap(
+      (result) => getResultData(result)?.items || [],
+    );
+
+    return {
+      recentlyPlayedTracks,
+      savedTracks: savedTrackList,
+      topTracks: topTrackLists,
+    };
+  };
+
+  const createPrivatePlaylistFromTracks = async ({
+    name,
+    description,
+    tracks: playlistTracks,
+  }) => {
+    const profile = await spotifyApi.get("/me");
+    const userId = profile.data?.id;
+
+    if (!userId) {
+      throw new Error("Could not find Spotify user profile.");
+    }
+
+    const playlist = await spotifyApi.post(`/users/${userId}/playlists`, {
+      name,
+      description,
+      public: false,
+    });
+
+    const trackUris = [];
+
+    for (const track of playlistTracks) {
+      const spotifyTrack = await searchTrack(track.track_name, track.artist_name);
+
+      if (spotifyTrack?.uri) {
+        trackUris.push(spotifyTrack.uri);
+      }
+    }
+
+    if (trackUris.length > 0) {
+      await spotifyApi.post(`/playlists/${playlist.data.id}/tracks`, {
+        uris: trackUris,
+      });
+    }
+
+    return playlist.data?.external_urls?.spotify;
   };
 
   // ---- Initial fetch once per app session ----
@@ -132,6 +212,8 @@ export function SpotifyProvider({ children }) {
       getArtist,
       getArtistAlbums,
       getFollowedArtists,
+      getLiveListeningSignals,
+      createPrivatePlaylistFromTracks,
     }),
     [initials, tracks, playlists, loading],
   );

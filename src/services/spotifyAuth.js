@@ -6,6 +6,8 @@ const SCOPES = [
   "user-library-read",
   "user-follow-read",
   "user-top-read",
+  "user-read-recently-played",
+  "playlist-modify-private",
 
   // REQUIRED FOR PLAY
   "user-read-playback-state",
