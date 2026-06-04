@@ -36,7 +36,7 @@ function RankingTable({ title, rows, columns }) {
     <div className="bg-[#181818] rounded-lg p-4">
       <h2 className="text-lg font-bold mb-4">{title}</h2>
 
-      <div className="space-y-3">
+      <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
         {rows.map((row, index) => (
           <div
             key={`${title}-${index}-${row.name || ""}-${row.artistName || ""}-${row.albumName || ""}`}
@@ -382,23 +382,33 @@ function Dashboard() {
             </div>
 
             <section className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
-              <RankingTable
-                title="Top Songs"
-                rows={dashboardTopTracks}
-                columns={["artistName", "albumName"]}
-              />
+              {mlLoading ? (
+                <>
+                  <div className="bg-[#181818] rounded-lg p-4 h-[700px] animate-pulse" />
+                  <div className="bg-[#181818] rounded-lg p-4 h-[700px] animate-pulse" />
+                  <div className="bg-[#181818] rounded-lg p-4 h-[700px] animate-pulse" />
+                </>
+              ) : (
+                <>
+                  <RankingTable
+                    title="Top Songs"
+                    rows={dashboardTopTracks}
+                    columns={["artistName", "albumName"]}
+                  />
 
-              <RankingTable
-                title="Top Artists"
-                rows={dashboardTopArtists}
-                columns={[]}
-              />
+                  <RankingTable
+                    title="Top Artists"
+                    rows={dashboardTopArtists}
+                    columns={[]}
+                  />
 
-              <RankingTable
-                title="Top Albums"
-                rows={dashboardTopAlbums}
-                columns={["artistName"]}
-              />
+                  <RankingTable
+                    title="Top Albums"
+                    rows={dashboardTopAlbums}
+                    columns={["artistName"]}
+                  />
+                </>
+              )}
             </section>
 
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
