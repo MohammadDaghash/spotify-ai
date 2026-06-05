@@ -34,6 +34,38 @@ export async function getMlDashboardAnalytics(
   return data;
 }
 
+export async function syncRecentlyPlayed(plays = []) {
+  const response = await fetch(`${ML_API_BASE_URL}/listening/recently-played`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ plays }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to sync recently played tracks");
+  }
+
+  const data = await response.json();
+
+  if (data?.sync?.inserted > 0) {
+    dashboardCache.clear();
+  }
+
+  return data;
+}
+
+export async function getListeningSyncStatus() {
+  const response = await fetch(`${ML_API_BASE_URL}/listening/status`);
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch listening sync status");
+  }
+
+  return response.json();
+}
+
 export async function getArtistRecommendations({
   topN = 20,
   likedArtists = [],
@@ -95,10 +127,20 @@ export async function getTrackRecommendations({
 export async function getTripPlaylists({
   limit = 25,
   newSongMaxPlays = 5,
+  surveyLikedArtists = [],
+  surveyIgnoredArtists = [],
 } = {}) {
   const params = new URLSearchParams({
     limit,
     new_song_max_plays: newSongMaxPlays,
+  });
+
+  surveyLikedArtists.forEach((artist) => {
+    params.append("survey_liked_artists", artist);
+  });
+
+  surveyIgnoredArtists.forEach((artist) => {
+    params.append("survey_ignored_artists", artist);
   });
 
   const response = await fetch(
@@ -106,7 +148,7 @@ export async function getTripPlaylists({
   );
 
   if (!response.ok) {
-    throw new Error("Failed to fetch trip playlists");
+    throw new Error("Failed to fetch group playlists");
   }
 
   return response.json();

@@ -2,6 +2,8 @@ from pathlib import Path
 from functools import lru_cache
 import pandas as pd
 
+from services.listening_sync import DEFAULT_LIVE_HISTORY_FILE, load_synced_history
+
 
 @lru_cache(maxsize=4)
 def load_spotify_history(data_path: str) -> pd.DataFrame:
@@ -87,8 +89,43 @@ def filter_history(
     return filtered_df
 
 
+def load_combined_spotify_history(
+    data_path: str,
+    live_history_path=DEFAULT_LIVE_HISTORY_FILE,
+) -> pd.DataFrame:
+    exported_df = load_spotify_history(data_path).copy()
+    live_df = load_synced_history(live_history_path)
+
+    if live_df.empty:
+        return exported_df
+
+    combined_df = pd.concat([exported_df, live_df], ignore_index=True, sort=False)
+
+    combined_df["played_at"] = pd.to_datetime(
+        combined_df["played_at"],
+        utc=True,
+        errors="coerce",
+    )
+    combined_df = combined_df.dropna(
+        subset=["played_at", "track_name", "artist_name"]
+    )
+
+    combined_df["_dedupe_key"] = (
+        combined_df["played_at"].astype(str)
+        + "|"
+        + combined_df["track_name"].astype(str).str.lower()
+        + "|"
+        + combined_df["artist_name"].astype(str).str.lower()
+    )
+
+    combined_df = combined_df.drop_duplicates("_dedupe_key", keep="last")
+    combined_df = combined_df.drop(columns=["_dedupe_key"])
+
+    return combined_df
+
+
 def get_summary(file_path: str, time_range: str = "all", year: str = "all"):
-    df = load_spotify_history(file_path)
+    df = load_combined_spotify_history(file_path)
     df = filter_history(df, time_range=time_range, year=year)
 
     return {
@@ -107,7 +144,7 @@ def get_top_tracks(
     time_range: str = "all",
     year: str = "all",
 ):
-    df = load_spotify_history(file_path)
+    df = load_combined_spotify_history(file_path)
     df = filter_history(df, time_range=time_range, year=year)
 
     if sort_by not in ["minutes", "streams"]:
@@ -136,7 +173,7 @@ def get_top_artists(
     time_range: str = "all",
     year: str = "all",
 ):
-    df = load_spotify_history(file_path)
+    df = load_combined_spotify_history(file_path)
     df = filter_history(df, time_range=time_range, year=year)
 
     if sort_by not in ["minutes", "streams"]:
@@ -165,7 +202,7 @@ def get_top_albums(
     time_range: str = "all",
     year: str = "all",
 ):
-    df = load_spotify_history(file_path)
+    df = load_combined_spotify_history(file_path)
     df = filter_history(df, time_range=time_range, year=year)
 
     if sort_by not in ["minutes", "streams"]:

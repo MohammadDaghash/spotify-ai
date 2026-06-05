@@ -74,7 +74,12 @@ function RankingTable({ title, rows, columns }) {
 }
 
 function Dashboard() {
-  const { tracks = [], playlists = [], loading = false } = useSpotifyContext();
+  const {
+    tracks = [],
+    playlists = [],
+    loading = false,
+    listeningSyncStatus,
+  } = useSpotifyContext();
 
   const [timeRange, setTimeRange] = useState("all");
   const [ignoredSongs, setIgnoredSongs] = useState([]);
@@ -87,6 +92,7 @@ function Dashboard() {
   const [mlDashboardData, setMlDashboardData] = useState(null);
   const [mlError, setMlError] = useState("");
   const [mlLoading, setMlLoading] = useState(false);
+  const syncedPlayCount = listeningSyncStatus?.total_plays || 0;
 
   useEffect(() => {
     let isCurrentRequest = true;
@@ -118,7 +124,7 @@ function Dashboard() {
     return () => {
       isCurrentRequest = false;
     };
-  }, [sortBy, timeRange, selectedYear]);
+  }, [sortBy, timeRange, selectedYear, syncedPlayCount]);
 
   const timeRangeLabel =
     timeRange === "30d"
@@ -260,10 +266,22 @@ function Dashboard() {
               <p className="text-sm text-gray-400">Python ML Backend</p>
 
               {mlDashboardData ? (
-                <p className="text-green-400 font-semibold">
-                  Connected — {mlDashboardData.summary.total_streams} streams
-                  analyzed by pandas
-                </p>
+                <>
+                  <p className="text-green-400 font-semibold">
+                    Connected — {mlDashboardData.summary.total_streams} streams
+                    analyzed by pandas
+                  </p>
+
+                  {listeningSyncStatus && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Live sync stored {syncedPlayCount.toLocaleString()} recent
+                      plays
+                      {listeningSyncStatus.currently_playing?.track_name
+                        ? ` • Now playing: ${listeningSyncStatus.currently_playing.track_name} by ${listeningSyncStatus.currently_playing.artist_name}`
+                        : ""}
+                    </p>
+                  )}
+                </>
               ) : mlError ? (
                 <p className="text-red-400 font-semibold">
                   Backend error: {mlError}

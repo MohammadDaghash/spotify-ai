@@ -34,12 +34,27 @@ def build_track_features(df: pd.DataFrame) -> pd.DataFrame:
     df["is_skip"] = df["minutes_played"] < 0.5
 
     max_played_at = df["played_at"].max()
+    last_7_days = df["played_at"] >= max_played_at - pd.Timedelta(days=7)
+    last_14_days = df["played_at"] >= max_played_at - pd.Timedelta(days=14)
+    last_30_days = df["played_at"] >= max_played_at - pd.Timedelta(days=30)
+    df["recent_7d_stream"] = last_7_days.astype(int)
+    df["recent_14d_stream"] = last_14_days.astype(int)
+    df["recent_30d_stream"] = last_30_days.astype(int)
+    df["recent_7d_minutes"] = df["minutes_played"].where(last_7_days, 0)
+    df["recent_14d_minutes"] = df["minutes_played"].where(last_14_days, 0)
+    df["recent_30d_minutes"] = df["minutes_played"].where(last_30_days, 0)
 
     track_features = (
         df.groupby(["track_name", "artist_name", "album_name"])
         .agg(
             streams=("track_name", "count"),
             total_minutes=("minutes_played", "sum"),
+            recent_7d_streams=("recent_7d_stream", "sum"),
+            recent_14d_streams=("recent_14d_stream", "sum"),
+            recent_30d_streams=("recent_30d_stream", "sum"),
+            recent_7d_minutes=("recent_7d_minutes", "sum"),
+            recent_14d_minutes=("recent_14d_minutes", "sum"),
+            recent_30d_minutes=("recent_30d_minutes", "sum"),
             active_days=("played_at", lambda x: x.dt.date.nunique()),
             avg_minutes_per_stream=("minutes_played", "mean"),
             skip_rate=("is_skip", "mean"),
@@ -51,11 +66,24 @@ def build_track_features(df: pd.DataFrame) -> pd.DataFrame:
     track_features["listen_strength"] = (
         track_features["total_minutes"] * (1 - track_features["skip_rate"])
     )
+    track_features["recent_listen_strength"] = (
+        (
+            track_features["recent_7d_minutes"] * 4
+            + track_features["recent_14d_minutes"] * 2
+            + track_features["recent_30d_minutes"]
+        )
+        * (1 - track_features["skip_rate"])
+    )
 
     days_since_last_play = (
         max_played_at - track_features["last_played_at"]
     ).dt.days.clip(lower=0)
     track_features["recency_score"] = 1 / (1 + days_since_last_play)
+    track_features["group_score"] = (
+        track_features["recent_listen_strength"] * 0.65
+        + track_features["listen_strength"] * 0.25
+        + track_features["recency_score"] * 10
+    )
 
     return track_features
 
@@ -171,15 +199,31 @@ def get_trip_playlists(
     df: pd.DataFrame,
     limit: int = 25,
     new_song_max_plays: int = 5,
+    survey_liked_artists: list[str] | None = None,
+    survey_ignored_artists: list[str] | None = None,
 ):
     track_features = build_track_features(df)
+    survey_liked_artists = survey_liked_artists or []
+    survey_ignored_artists = survey_ignored_artists or []
+    track_features["survey_artist_boost"] = track_features["artist_name"].isin(
+        survey_liked_artists,
+    ).astype(int)
+    track_features["survey_artist_penalty"] = track_features["artist_name"].isin(
+        survey_ignored_artists,
+    ).astype(int)
+    track_features["group_score"] = (
+        track_features["group_score"]
+        + track_features["survey_artist_boost"] * 25
+        - track_features["survey_artist_penalty"] * 40
+    )
+    track_features = track_features[track_features["survey_artist_penalty"] == 0]
 
     shared_tracks = (
         track_features[
             (track_features["streams"] >= 10)
             & (track_features["skip_rate"] <= 0.45)
         ]
-        .sort_values(["listen_strength", "streams"], ascending=[False, False])
+        .sort_values(["group_score", "recent_7d_streams"], ascending=[False, False])
         .head(limit)
     )
 
@@ -189,7 +233,7 @@ def get_trip_playlists(
             & (track_features["streams"] < 10)
             & (track_features["skip_rate"] <= 0.5)
         ]
-        .sort_values(["listen_strength", "recency_score"], ascending=[False, False])
+        .sort_values(["group_score", "recency_score"], ascending=[False, False])
         .head(limit)
     )
 
@@ -198,7 +242,7 @@ def get_trip_playlists(
             (track_features["streams"] < new_song_max_plays)
             & (track_features["skip_rate"] <= 0.5)
         ]
-        .sort_values("listen_strength", ascending=False)
+        .sort_values("group_score", ascending=False)
         .head(limit)
     )
 
@@ -212,6 +256,9 @@ def get_trip_playlists(
                 "minutes": round(float(row["total_minutes"])),
                 "skip_rate": round(float(row["skip_rate"]), 2),
                 "listen_strength": round(float(row["listen_strength"]), 2),
+                "recent_7d_streams": int(row["recent_7d_streams"]),
+                "recent_30d_streams": int(row["recent_30d_streams"]),
+                "group_score": round(float(row["group_score"]), 2),
                 "reason": playlist_type,
             }
             for _, row in rows.iterrows()
@@ -219,7 +266,7 @@ def get_trip_playlists(
 
     return {
         "shared": {
-            "name": "Trip - Shared Favorites",
+            "name": "Group Mix - Shared Favorites",
             "description": "Songs the group is already likely to know and enjoy.",
             "tracks": serialize_playlist(
                 shared_tracks,
@@ -227,7 +274,7 @@ def get_trip_playlists(
             ),
         },
         "bridge": {
-            "name": "Trip - Bridge Picks",
+            "name": "Group Mix - Bridge Picks",
             "description": "Songs not common to everyone yet, but likely to work for the group.",
             "tracks": serialize_playlist(
                 bridge_tracks,
@@ -235,7 +282,7 @@ def get_trip_playlists(
             ),
         },
         "new": {
-            "name": "Trip - New Discoveries",
+            "name": "Group Mix - New Discoveries",
             "description": f"Songs everyone should know less than {new_song_max_plays} times.",
             "tracks": serialize_playlist(
                 new_tracks,

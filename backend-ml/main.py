@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
 from services.recommender import (
     get_artist_recommendations,
     get_track_recommendations,
@@ -9,16 +11,44 @@ from services.recommender import (
     get_top_user_artists,
 )
 from services.spotify_parser import (
-    load_spotify_history,
+    load_combined_spotify_history,
     get_summary,
     get_top_tracks,
     get_top_artists,
     get_top_albums,
 )
+from services.listening_sync import (
+    get_recent_synced_plays,
+    get_sync_status,
+    upsert_recent_plays,
+)
 
 DATA_FILE = "data/private"
 
 app = FastAPI(title="Spotify AI ML Backend")
+
+
+class SyncedPlay(BaseModel):
+    track_id: Optional[str] = ""
+    track_name: str
+    artist_name: str
+    album_name: Optional[str] = ""
+    played_at: str
+    duration_ms: Optional[int] = 0
+    spotify_url: Optional[str] = ""
+    uri: Optional[str] = ""
+    source: Optional[str] = "spotify_recently_played"
+
+
+class ListeningSyncPayload(BaseModel):
+    plays: list[SyncedPlay]
+
+
+def model_to_dict(model):
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+
+    return model.dict()
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +78,29 @@ def root():
 def health_check():
     return {
         "status": "healthy"
+    }
+
+
+@app.post("/listening/recently-played")
+def sync_recently_played(payload: ListeningSyncPayload):
+    plays = [model_to_dict(play) for play in payload.plays]
+
+    return {
+        "sync": upsert_recent_plays(plays)
+    }
+
+
+@app.get("/listening/status")
+def listening_status():
+    return {
+        "sync": get_sync_status()
+    }
+
+
+@app.get("/listening/recently-played")
+def recently_synced_plays(limit: int = 50):
+    return {
+        "plays": get_recent_synced_plays(limit=limit)
     }
 
 
@@ -87,7 +140,7 @@ def dashboard_analytics(
 
     return {
         "summary": get_summary(DATA_FILE, time_range=time_range, year=year),
-        "top_tracks": get_top_tracks(DATA_FILE, limit=20, sort_by=sort_by, time_range=time_range, year=year),
+        "top_tracks": get_top_tracks(DATA_FILE, limit=100, sort_by=sort_by, time_range=time_range, year=year),
         "top_artists": get_top_artists(DATA_FILE, limit=20, sort_by=sort_by, time_range=time_range, year=year),
         "top_albums": get_top_albums(DATA_FILE, limit=20, sort_by=sort_by, time_range=time_range, year=year),
     }
@@ -98,7 +151,7 @@ def artist_recommendations(
     liked_artists: list[str] = Query(default=[]),
     ignored_artists: list[str] = Query(default=[]),
 ):
-    df = load_spotify_history(DATA_FILE)
+    df = load_combined_spotify_history(DATA_FILE)
 
     return {
         "recommendations": get_artist_recommendations(
@@ -116,7 +169,7 @@ def track_recommendations(
     liked_tracks: list[str] = Query(default=[]),
     ignored_tracks: list[str] = Query(default=[]),
 ):
-    df = load_spotify_history(DATA_FILE)
+    df = load_combined_spotify_history(DATA_FILE)
 
     return {
         "recommendations": get_track_recommendations(
@@ -132,20 +185,24 @@ def track_recommendations(
 def trip_playlists(
     limit: int = 25,
     new_song_max_plays: int = 5,
+    survey_liked_artists: list[str] = Query(default=[]),
+    survey_ignored_artists: list[str] = Query(default=[]),
 ):
-    df = load_spotify_history(DATA_FILE)
+    df = load_combined_spotify_history(DATA_FILE)
 
     return {
         "playlists": get_trip_playlists(
             df,
             limit=limit,
             new_song_max_plays=new_song_max_plays,
+            survey_liked_artists=survey_liked_artists,
+            survey_ignored_artists=survey_ignored_artists,
         )
     }
 
 @app.get("/recommendations/artist-features")
 def artist_features():
-    df = load_spotify_history(DATA_FILE)
+    df = load_combined_spotify_history(DATA_FILE)
     features = build_artist_features(df)
 
     features = features.sort_values(
@@ -159,7 +216,7 @@ def artist_features():
 
 @app.get("/recommendations/user-vector-artists")
 def user_vector_artists():
-    df = load_spotify_history(DATA_FILE)
+    df = load_combined_spotify_history(DATA_FILE)
 
     return {
         "artists": get_top_user_artists(df, limit=10)

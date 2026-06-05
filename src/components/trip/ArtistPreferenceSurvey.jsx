@@ -36,6 +36,7 @@ const DEFAULT_ARTISTS = [
 function ArtistPreferenceSurvey({
   memberName,
   artistPool = DEFAULT_ARTISTS,
+  context = {},
   minimumChoices = 5,
   onSave,
   onCancel,
@@ -52,6 +53,12 @@ function ArtistPreferenceSurvey({
   const currentArtist = availableArtists[currentIndex] || availableArtists[0];
   const choicesCount = likedArtists.length + ignoredArtists.length;
   const canSave = choicesCount >= minimumChoices;
+  const contextMoods =
+    Array.isArray(context.moods) && context.moods.length > 0
+      ? context.moods
+      : context.mood
+        ? [context.mood]
+        : [];
 
   const recordChoice = (artist, sentiment) => {
     if (!artist) return;
@@ -74,6 +81,17 @@ function ArtistPreferenceSurvey({
             {memberName || "Survey member"} picked {choicesCount}. Minimum{" "}
             {minimumChoices} required.
           </p>
+          {(context.hangoutType || contextMoods.length || context.languages?.length) && (
+            <p className="text-xs text-gray-500 mt-2">
+              {[
+                context.hangoutType,
+                ...contextMoods,
+                ...(context.languages || []),
+              ]
+                .filter(Boolean)
+                .join(" • ")}
+            </p>
+          )}
         </div>
 
         <button
@@ -89,6 +107,9 @@ function ArtistPreferenceSurvey({
         <div className="bg-[#121212] rounded-lg p-5">
           <p className="text-sm text-gray-400 mb-2">Do they like this artist?</p>
           <h3 className="text-3xl font-bold">{currentArtist}</h3>
+          <p className="text-xs text-gray-500 mt-2">
+            Suggested from the selected group context.
+          </p>
 
           <div className="flex gap-3 mt-6">
             <button

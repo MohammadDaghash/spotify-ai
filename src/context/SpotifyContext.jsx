@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import spotifyApi from "../services/spotifyApi";
+import { getListeningSyncStatus, syncRecentlyPlayed } from "../services/mlApi";
 
 /**
  * SpotifyContext
@@ -10,11 +11,49 @@ import spotifyApi from "../services/spotifyApi";
 
 const SpotifyContext = createContext(null);
 
+function mapSpotifyTrackToSyncPlay(track, playedAt, source) {
+  if (!track?.name || !track?.artists?.length || !playedAt) {
+    return null;
+  }
+
+  return {
+    track_id: track.id || "",
+    track_name: track.name,
+    artist_name: track.artists.map((artist) => artist.name).join(", "),
+    album_name: track.album?.name || "",
+    played_at: playedAt,
+    duration_ms: track.duration_ms || 0,
+    spotify_url: track.external_urls?.spotify || "",
+    uri: track.uri || "",
+    source,
+  };
+}
+
+function mapCurrentlyPlaying(data) {
+  const track = data?.item;
+
+  if (!track?.name || track.type !== "track") {
+    return null;
+  }
+
+  return {
+    track_id: track.id || "",
+    track_name: track.name,
+    artist_name: track.artists?.map((artist) => artist.name).join(", ") || "",
+    album_name: track.album?.name || "",
+    progress_ms: data.progress_ms || 0,
+    duration_ms: track.duration_ms || 0,
+    is_playing: Boolean(data.is_playing),
+    spotify_url: track.external_urls?.spotify || "",
+  };
+}
+
 export function SpotifyProvider({ children }) {
   const [initials, setInitials] = useState("");
   const [tracks, setTracks] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [listeningSyncStatus, setListeningSyncStatus] = useState(null);
 
   // ---- Base fetchers ----
 
@@ -82,6 +121,53 @@ export function SpotifyProvider({ children }) {
   const getFollowedArtists = async () => {
     const res = await spotifyApi.get("/me/following?type=artist&limit=20");
     return res.data?.artists?.items || [];
+  };
+
+  const getCurrentlyPlaying = async () => {
+    const res = await spotifyApi.get("/me/player/currently-playing");
+    return res.data || null;
+  };
+
+  const syncListeningHistory = async () => {
+    const [recentlyPlayedResult, currentlyPlayingResult] = await Promise.allSettled([
+      spotifyApi.get("/me/player/recently-played?limit=50"),
+      getCurrentlyPlaying(),
+    ]);
+
+    const recentItems =
+      recentlyPlayedResult.status === "fulfilled"
+        ? recentlyPlayedResult.value.data?.items || []
+        : [];
+
+    const plays = recentItems
+      .map((item) =>
+        mapSpotifyTrackToSyncPlay(
+          item.track,
+          item.played_at,
+          "spotify_recently_played",
+        ),
+      )
+      .filter(Boolean);
+
+    const syncResponse =
+      plays.length > 0
+        ? await syncRecentlyPlayed(plays)
+        : await getListeningSyncStatus();
+
+    const currentlyPlaying =
+      currentlyPlayingResult.status === "fulfilled"
+        ? mapCurrentlyPlaying(currentlyPlayingResult.value)
+        : null;
+
+    const nextStatus = {
+      ...(syncResponse.sync || {}),
+      currently_playing: currentlyPlaying,
+      last_checked_at: new Date().toISOString(),
+    };
+
+    setListeningSyncStatus(nextStatus);
+
+    return nextStatus;
   };
 
   const getLiveListeningSignals = async () => {
@@ -154,6 +240,7 @@ export function SpotifyProvider({ children }) {
   // ---- Initial fetch once per app session ----
   useEffect(() => {
     let cancelled = false;
+    let syncIntervalId;
 
     const token =
       localStorage.getItem("spotify_access_token") ||
@@ -189,8 +276,29 @@ export function SpotifyProvider({ children }) {
     }
 
     bootstrap();
+
+    async function runListeningSync() {
+      try {
+        await syncListeningHistory();
+      } catch (err) {
+        console.error("Listening sync failed:", err);
+
+        if (!cancelled) {
+          setListeningSyncStatus((prev) => ({
+            ...(prev || {}),
+            error: err.message,
+            last_checked_at: new Date().toISOString(),
+          }));
+        }
+      }
+    }
+
+    runListeningSync();
+    syncIntervalId = window.setInterval(runListeningSync, 90_000);
+
     return () => {
       cancelled = true;
+      window.clearInterval(syncIntervalId);
     };
   }, []);
 
@@ -201,21 +309,24 @@ export function SpotifyProvider({ children }) {
       tracks,
       playlists,
       loading,
+      listeningSyncStatus,
 
       // refreshers
       refreshProfile: getUserProfile,
       refreshTopTracks: getTopTracks,
       refreshPlaylists: getUserPlaylists,
+      syncListeningHistory,
 
       // helpers
       searchArtist,
       getArtist,
       getArtistAlbums,
       getFollowedArtists,
+      getCurrentlyPlaying,
       getLiveListeningSignals,
       createPrivatePlaylistFromTracks,
     }),
-    [initials, tracks, playlists, loading],
+    [initials, tracks, playlists, loading, listeningSyncStatus],
   );
 
   return (

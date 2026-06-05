@@ -13,8 +13,8 @@ function Sidebar() {
       path: "/recommendations",
     },
     {
-      label: "Trip Group",
-      path: "/trip",
+      label: "Group Mix",
+      path: "/group",
     },
     {
       label: "Model",

@@ -26,5 +26,6 @@ dist-ssr
 .env.*
 
 backend-ml/data/private/
+backend-ml/data/live/
 __pycache__/
 *.pyc

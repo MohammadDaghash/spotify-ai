@@ -45,7 +45,7 @@ function Callback() {
           },
         });
 
-        const { access_token, expires_in } = res.data;
+        const { access_token, expires_in, refresh_token } = res.data;
 
         if (!access_token) {
           throw new Error("No access token returned from Spotify");
@@ -56,6 +56,10 @@ function Callback() {
           "spotify_token_expires_at",
           String(Date.now() + expires_in * 1000),
         );
+
+        if (refresh_token) {
+          localStorage.setItem("spotify_refresh_token", refresh_token);
+        }
 
         sessionStorage.removeItem("spotify_code_verifier");
 

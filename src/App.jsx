@@ -16,6 +16,7 @@ export default function App() {
       <Route path="/" element={<Dashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/recommendations" element={<Recommendations />} />
+      <Route path="/group" element={<Trip />} />
       <Route path="/trip" element={<Trip />} />
       <Route path="/model" element={<Model />} />
 

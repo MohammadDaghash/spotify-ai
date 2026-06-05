@@ -44,6 +44,18 @@ function getStoredList(key) {
   }
 }
 
+function getStoredGroupMembers() {
+  try {
+    return JSON.parse(
+      localStorage.getItem("spotify_ai_group_members") ||
+        localStorage.getItem("spotify_ai_trip_members") ||
+        "[]",
+    );
+  } catch {
+    return [];
+  }
+}
+
 function applyWeightDelta(weights, key, delta) {
   if (!key) return;
   weights[key] = Math.max(0, (weights[key] || 0) + delta);
@@ -274,6 +286,16 @@ function Recommendations() {
         setMlLoading(true);
         setMlError("");
 
+        const groupMembers = getStoredGroupMembers();
+        const surveyLikedArtists = [
+          ...new Set(groupMembers.flatMap((member) => member.likedArtists || [])),
+        ];
+        const surveyIgnoredArtists = [
+          ...new Set(
+            groupMembers.flatMap((member) => member.ignoredArtists || []),
+          ),
+        ];
+
         const [
           artistRecommendationsData,
           trackRecommendationsData,
@@ -294,6 +316,8 @@ function Recommendations() {
             getTripPlaylists({
               limit: 25,
               newSongMaxPlays: 5,
+              surveyLikedArtists,
+              surveyIgnoredArtists,
             }),
           ]);
 
@@ -708,7 +732,7 @@ function Recommendations() {
               <section className="bg-[#181818] rounded-lg p-6 mb-6">
                 <div className="flex items-center justify-between gap-4 mb-4">
                   <div>
-                    <h2 className="text-xl font-bold">Trip playlists</h2>
+                    <h2 className="text-xl font-bold">Group playlists</h2>
                     <p className="text-sm text-gray-400 mt-1">
                       Three playlist strategies for group listening.
                     </p>
@@ -744,7 +768,11 @@ function Recommendations() {
                               #{index + 1} {track.track_name}
                             </p>
                             <p className="text-xs text-gray-400">
-                              {track.artist_name} • {track.streams} plays
+                              {track.artist_name} • {track.streams} plays •{" "}
+                              {track.recent_7d_streams || 0} this week
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Group score: {track.group_score}
                             </p>
                           </div>
                         ))}
