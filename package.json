@@ -11,10 +11,13 @@
     "test:admin-auth": "node scripts/testAdminAuth.mjs",
     "test:demo-data": "node scripts/testDemoDataSafety.mjs",
     "test:public-demo": "node scripts/testPublicDemoBugs.mjs",
+    "test:public-listening-history": "node scripts/testPublicListeningHistory.mjs",
     "test:recommendation-replacement": "node scripts/testRecommendationReplacement.mjs",
+    "test:spotify-sync": "node scripts/testSpotifyPublicSync.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/blob": "^2.4.1",
     "axios": "^1.13.2",
     "openai": "^6.15.0",
     "react": "^19.2.0",

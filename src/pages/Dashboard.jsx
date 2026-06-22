@@ -3,19 +3,27 @@ import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import Header from "../components/layout/Header.jsx";
 import RankMovementBadge from "../components/RankMovementBadge.jsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import AdminGateModal from "../components/AdminGateModal.jsx";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSpotifyContext } from "../context/SpotifyContext.jsx";
 import { allSpotifyHistory } from "../data/loadSpotifyHistory.js";
 import { parseSpotifyHistory } from "../utils/spotifyDataParser.js";
 import { readLocalSpotifyHistory } from "../utils/localSpotifyHistory.js";
+import { dedupeHistoryEntries } from "../utils/publicListeningHistory.js";
 import {
   addRankMovementToRows,
   getPreviousHistoryWindow,
 } from "../utils/rankMovement.js";
 import { hasSpotifyAccessToken } from "../utils/spotifySession.js";
+import { isAdmin } from "../utils/adminAuth.js";
 import ListeningTrendChart from "../components/charts/ListeningTrendChart.jsx";
 import { getListeningTrend } from "../utils/spotifyDataParser.js";
 import { getMlDashboardAnalytics } from "../services/mlApi";
+import {
+  getPublicListeningStatus,
+  getPublicSyncedHistory,
+  syncPublicListeningNow,
+} from "../services/publicListeningApi.js";
 
 const RANKING_IMAGE_CACHE_KEY = "spotify_ai_dashboard_ranking_images_v4";
 const MAX_CACHED_RANKING_IMAGES = 500;
@@ -110,6 +118,16 @@ function StatCard({ title, value, subtitle }) {
   );
 }
 
+function formatSyncTime(value) {
+  if (!value) return "Not synced yet";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "Not synced yet";
+
+  return date.toLocaleString();
+}
+
 function RankingImage({ row, onImageError }) {
   const isArtist = row.imageType === "artist";
   const shapeClass = isArtist ? "rounded-full" : "rounded";
@@ -202,6 +220,18 @@ function Dashboard() {
   const [mlDashboardData, setMlDashboardData] = useState(null);
   const [mlError, setMlError] = useState("");
   const [mlLoading, setMlLoading] = useState(false);
+  const [publicSyncStatus, setPublicSyncStatus] = useState(null);
+  const [publicSyncError, setPublicSyncError] = useState("");
+  const [publicSyncedHistory, setPublicSyncedHistory] = useState([]);
+  const [manualSyncState, setManualSyncState] = useState({
+    loading: false,
+    message: "",
+    error: "",
+  });
+  const [adminGate, setAdminGate] = useState({
+    isOpen: false,
+    actionLabel: "",
+  });
   const [rankingImages, setRankingImages] = useState(getStoredRankingImages);
   const [rankingImageStatus, setRankingImageStatus] = useState({
     requested: 0,
@@ -216,16 +246,62 @@ function Dashboard() {
   const syncedPlayCount = listeningSyncStatus?.total_plays || 0;
   const liveSyncVersion = listeningSyncStatus?.last_checked_at || "";
   const canLoadSpotifyArtwork = hasSpotifyAccessToken();
+  const publicSpotifyHistory = useMemo(
+    () => dedupeHistoryEntries([...allSpotifyHistory, ...publicSyncedHistory]),
+    [publicSyncedHistory],
+  );
   const displayedSpotifyHistory =
-    localSpotifyHistory.length > 0 ? localSpotifyHistory : allSpotifyHistory;
+    localSpotifyHistory.length > 0 ? localSpotifyHistory : publicSpotifyHistory;
   const historySourceLabel =
     localSpotifyHistory.length > 0
       ? "Your uploaded Spotify history"
-      : "Public demo Spotify history";
+      : publicSyncedHistory.length > 0
+        ? "Public demo Spotify history + synced recent Spotify plays"
+        : "Public demo Spotify history";
+
+  const loadPublicListeningData = useCallback(async () => {
+    const [statusData, recentData] = await Promise.all([
+      getPublicListeningStatus(),
+      getPublicSyncedHistory(500),
+    ]);
+
+    return {
+      sync: recentData.sync || statusData.sync || null,
+      history: recentData.history || [],
+    };
+  }, []);
 
   useEffect(() => {
     rankingImagesRef.current = rankingImages;
   }, [rankingImages]);
+
+  useEffect(() => {
+    let isCurrentRequest = true;
+
+    async function refreshPublicListeningData() {
+      try {
+        setPublicSyncError("");
+        const data = await loadPublicListeningData();
+
+        if (isCurrentRequest) {
+          setPublicSyncStatus(data.sync);
+          setPublicSyncedHistory(data.history);
+        }
+      } catch (error) {
+        if (isCurrentRequest) {
+          setPublicSyncError(
+            error.message || "Could not load public listening sync status.",
+          );
+        }
+      }
+    }
+
+    refreshPublicListeningData();
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [loadPublicListeningData]);
 
   useEffect(() => {
     const refreshLocalHistory = () => {
@@ -543,6 +619,54 @@ function Dashboard() {
     setImageLoadVersion((version) => version + 1);
   };
 
+  const runManualSync = async () => {
+    try {
+      setManualSyncState({
+        loading: true,
+        message: "",
+        error: "",
+      });
+
+      const syncResult = await syncPublicListeningNow();
+      const refreshedData = await loadPublicListeningData();
+
+      setPublicSyncStatus(refreshedData.sync || syncResult.sync || null);
+      setPublicSyncedHistory(refreshedData.history || []);
+      setManualSyncState({
+        loading: false,
+        message: syncResult.ok
+          ? `Sync finished. ${syncResult.inserted || 0} new plays added.`
+          : "Sync request finished without adding plays.",
+        error: "",
+      });
+    } catch (error) {
+      setManualSyncState({
+        loading: false,
+        message: "",
+        error: error.message || "Manual sync failed.",
+      });
+    }
+  };
+
+  const requestManualSync = () => {
+    if (isAdmin()) {
+      runManualSync();
+      return;
+    }
+
+    setAdminGate({
+      isOpen: true,
+      actionLabel: "Sync Spotify listening data",
+    });
+  };
+
+  const closeAdminGate = () => {
+    setAdminGate({
+      isOpen: false,
+      actionLabel: "",
+    });
+  };
+
   useEffect(() => {
     if (!rankingImageRequestKey) return;
 
@@ -778,6 +902,50 @@ function Dashboard() {
               )}
             </div>
 
+            <div className="mb-4 flex flex-col gap-4 bg-[#181818] rounded-lg p-4 border border-white/10 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm text-gray-400">Public Spotify Sync</p>
+                <p className="text-green-400 font-semibold">
+                  Last synced: {formatSyncTime(publicSyncStatus?.last_synced_at)}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {publicSyncStatus?.configured
+                    ? `${(publicSyncStatus.total_plays || 0).toLocaleString()} recent API plays stored server-side`
+                    : "Server-side Spotify sync is not configured yet; imported public history is still available."}
+                  {publicSyncStatus?.latest_played_at
+                    ? ` • Latest play: ${formatSyncTime(publicSyncStatus.latest_played_at)}`
+                    : ""}
+                  {publicSyncStatus?.currently_playing?.track_name
+                    ? ` • Now playing: ${publicSyncStatus.currently_playing.track_name} by ${publicSyncStatus.currently_playing.artist_name}`
+                    : ""}
+                </p>
+                {publicSyncError && (
+                  <p className="text-xs text-amber-300 mt-1">
+                    Public sync status unavailable: {publicSyncError}
+                  </p>
+                )}
+                {manualSyncState.message && (
+                  <p className="text-xs text-green-300 mt-1">
+                    {manualSyncState.message}
+                  </p>
+                )}
+                {manualSyncState.error && (
+                  <p className="text-xs text-red-300 mt-1">
+                    {manualSyncState.error}
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={requestManualSync}
+                disabled={manualSyncState.loading}
+                className="rounded-full bg-white px-5 py-2 text-sm font-bold text-black transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+              >
+                {manualSyncState.loading ? "Syncing..." : "Sync now"}
+              </button>
+            </div>
+
             <div className="mb-6 text-sm opacity-70">
               {loading
                 ? "Loading Spotify data…"
@@ -788,7 +956,9 @@ function Dashboard() {
               <StatCard
                 title="Streams analyzed"
                 value={dashboardTotalStreams}
-                subtitle="From Python/pandas"
+                subtitle={
+                  mlDashboardData ? "From Python/pandas" : "From public history"
+                }
               />
               <StatCard
                 title="Minutes played"
@@ -945,6 +1115,18 @@ function Dashboard() {
           </div>
         </main>
       </div>
+
+      <AdminGateModal
+        actionLabel={adminGate.actionLabel}
+        isOpen={adminGate.isOpen}
+        message="Admin login required to manually sync public Spotify data."
+        onApproved={() => {
+          closeAdminGate();
+          runManualSync();
+        }}
+        onClose={closeAdminGate}
+        title="Admin login required"
+      />
     </div>
   );
 }

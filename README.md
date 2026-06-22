@@ -12,6 +12,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - Lets users like/ignore recommendations and reranks future results around that feedback.
 - Shows score breakdowns, confidence, raw similarity, quality signals, and rank movement for transparency.
 - Supports public demo data when Spotify login or the ML backend is not configured.
+- Publishes the owner’s listening dashboard as a public portfolio demo while keeping OAuth secrets server-side.
 
 ## Key Features
 
@@ -29,6 +30,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - Spotify OAuth callback flow and Spotify Web API integration
 - Cached artwork/ranking lookups in the frontend
 - Trip playlist generation and survey-based preference inputs
+- Public Spotify sync status with admin-gated manual sync
 
 ## Tech Stack
 
@@ -73,6 +75,8 @@ Important modules:
 - `backend-ml/services/recommender.py` builds feature tables, user vectors, similarity scores, quality scores, and final ranked recommendations.
 - `backend-ml/services/listening_sync.py` stores recent live Spotify plays locally and merges them with exported history.
 - `src/services/mlApi.js` connects the React app to the ML backend and demo fallback data.
+- `api/listening/*.js` syncs recent Spotify plays server-side for the public Vercel demo.
+- `api/lib/publicListeningSync.js` refreshes Spotify access server-side, deduplicates plays, and stores safe public play data.
 - `src/pages/Dashboard.jsx` renders analytics, rank movement, artwork lookup, and listening summaries.
 - `src/pages/Recommendations.jsx` renders recommendation cards, feedback actions, scoring explanations, and trip playlist flows.
 
@@ -136,6 +140,53 @@ For local development, use the exact Vite origin:
 ```text
 http://127.0.0.1:5173/callback
 http://127.0.0.1:5174/callback
+```
+
+### Public Listening Sync on Vercel
+
+The deployed portfolio demo can show public dashboard/recommendation data without visitor login. Public data can include tracks, artists, albums, streams, minutes, ranking movement, recommendation results, and safe play timestamps.
+
+Never expose these values in frontend code:
+
+```text
+SPOTIFY_REFRESH_TOKEN
+SPOTIFY_CLIENT_SECRET
+BLOB_READ_WRITE_TOKEN
+CRON_SECRET
+```
+
+Set the server-only variables in Vercel Project Settings:
+
+```bash
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_optional_for_confidential_auth
+SPOTIFY_REFRESH_TOKEN=your_server_side_refresh_token
+BLOB_READ_WRITE_TOKEN=your_vercel_blob_read_write_token
+CRON_SECRET=generate_a_random_secret_at_least_16_chars
+```
+
+Attach a Vercel Blob store to persist synced plays across deployments. The sync JSON contains only safe public play metadata, not OAuth tokens.
+
+The production cron is configured in `vercel.json`:
+
+```json
+{
+  "path": "/api/listening/sync",
+  "schedule": "0 3 * * *"
+}
+```
+
+The Spotify Web API recently-played endpoint only returns the latest recent plays, not full lifetime history. This project keeps imported/exported history as the historical base and merges newly synced recent API plays into the public dashboard. Sync is idempotent and deduplicates by `track_id + played_at`.
+
+Admin-only manual sync is available from the Dashboard `Sync now` button. The current admin login is a lightweight frontend session, so the server endpoint is intentionally idempotent and returns no secrets. A real backend auth layer should be added before expanding admin-only write actions beyond this portfolio demo.
+
+Public sync endpoints:
+
+```text
+GET  /api/listening/status
+GET  /api/listening/recent
+GET  /api/listening/sync   # Vercel Cron
+POST /api/listening/sync   # admin-gated UI action
 ```
 
 ## ML Backend Endpoints
