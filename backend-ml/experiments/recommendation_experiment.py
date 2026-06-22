@@ -12,18 +12,20 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.append(str(BACKEND_DIR))
 
 from services.recommender import build_artist_features
-from services.spotify_parser import load_spotify_history
+from services.spotify_parser import load_combined_spotify_history
 
 
 FEATURE_COLUMNS = [
-    "streams",
-    "total_minutes",
-    "unique_tracks",
-    "unique_albums",
-    "active_days",
+    "log_streams",
+    "log_total_minutes",
+    "log_unique_tracks",
+    "log_unique_albums",
+    "log_active_days",
     "avg_minutes_per_stream",
     "skip_rate",
-    "listen_strength",
+    "log_listen_strength",
+    "log_recent_listen_strength",
+    "recency_score",
 ]
 
 
@@ -34,11 +36,14 @@ def run_recommendation_experiment(
     max_skip_rate: float = 0.5,
     max_known_artist_streams: int = 50,
 ) -> pd.DataFrame:
-    df = load_spotify_history(data_path)
+    df = load_combined_spotify_history(data_path)
     artist_features = build_artist_features(df)
 
     top_user_artists = (
-        artist_features.sort_values("listen_strength", ascending=False)
+        artist_features.sort_values(
+            ["recent_listen_strength", "listen_strength"],
+            ascending=[False, False],
+        )
         .head(top_user_artist_count)["artist_name"]
         .tolist()
     )
@@ -57,19 +62,44 @@ def run_recommendation_experiment(
     )
 
     # Coursera concept: NumPy vectorization builds one user vector from many rows.
+    # Practical upgrade: stronger/recent artists get larger weights.
     top_artist_vectors = scaled_features.loc[top_user_artists].to_numpy()
-    user_vector = np.mean(top_artist_vectors, axis=0).reshape(1, -1)
+    top_artist_features = artist_features.set_index("artist_name").loc[
+        top_user_artists
+    ]
+    weights = (
+        np.log1p(top_artist_features["listen_strength"])
+        + np.log1p(top_artist_features["recent_listen_strength"]) * 1.5
+        + 1
+    ).to_numpy()
+    user_vector = np.average(
+        top_artist_vectors,
+        axis=0,
+        weights=weights,
+    ).reshape(1, -1)
 
     similarity_scores = cosine_similarity(user_vector, X_scaled)[0]
+    calibrated_similarity_scores = np.clip((similarity_scores + 1) / 2, 0, 1)
+    quality_scores = (
+        (1 - artist_features["skip_rate"]) * 0.4
+        + artist_features["recency_score"] * 0.25
+        + np.minimum(artist_features["recent_30d_streams"], 10) / 10 * 0.2
+        + np.minimum(artist_features["unique_tracks"], 5) / 5 * 0.15
+    )
 
     results = pd.DataFrame(
         {
             "artist": artist_features["artist_name"],
-            "score": similarity_scores,
+            "similarity_score": calibrated_similarity_scores,
+            "raw_similarity_score": similarity_scores,
+            "quality_score": quality_scores,
+            "score": calibrated_similarity_scores * 0.72
+            + quality_scores.to_numpy() * 0.28,
             "streams": artist_features["streams"],
             "minutes": artist_features["total_minutes"],
             "skip_rate": artist_features["skip_rate"],
             "listen_strength": artist_features["listen_strength"],
+            "recent_listen_strength": artist_features["recent_listen_strength"],
         }
     )
 
@@ -91,10 +121,14 @@ def main():
             [
                 "artist",
                 "score",
+                "similarity_score",
+                "raw_similarity_score",
+                "quality_score",
                 "streams",
                 "minutes",
                 "skip_rate",
                 "listen_strength",
+                "recent_listen_strength",
             ]
         ].round(3)
     )

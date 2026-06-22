@@ -1,119 +1,101 @@
-# Spotify AI ML Platform
+# Spotify AI Analytics & Recommendation Platform
 
-A full-stack Spotify analytics and recommendation-system project built with React, FastAPI, Pandas, NumPy, scikit-learn, and the Spotify Web API.
+AI-powered Spotify analytics and recommendation platform with taste vectors, explainable insights, and feedback-aware ranking.
 
-The project started as a Spotify-style app and is being developed into a machine-learning portfolio project focused on music analytics, recommendation systems, feature engineering, feedback learning, and explainable recommendations.
+This project turns exported Spotify listening history and live Spotify Web API signals into dashboard-style analytics and personalized recommendations. It focuses on behavior-driven feature engineering, user taste vectors, underplayed-track discovery, feedback learning, and transparent recommendation scores.
 
----
+## What It Does
 
-## Current Status
+- Analyzes Spotify listening history across tracks, artists, albums, streams, minutes, and time windows.
+- Builds artist and track recommendation lists using engineered listening-behavior features.
+- Uses live Spotify signals when authenticated, including saved tracks, recently played tracks, followed artists, and top tracks.
+- Lets users like/ignore recommendations and reranks future results around that feedback.
+- Shows score breakdowns, confidence, raw similarity, quality signals, and rank movement for transparency.
+- Supports public demo data when Spotify login or the ML backend is not configured.
 
-The app now has a React frontend and a Python ML backend.
-
-Current recommendation features use:
-
-- Exported Spotify Extended Streaming History data
-- Live Spotify API signals when logged in
-- Pandas feature tables
-- NumPy user vectors
-- scikit-learn `StandardScaler`
-- Cosine similarity ranking
-- Local feedback learning from `Liked` and `Ignore` actions
-
-Spotify does not expose full lifetime per-track play counts through the public Web API, so exact play-count filtering still depends on exported history JSON files.
-
----
-
-## Main Features
+## Key Features
 
 - Listening analytics dashboard
 - Top tracks, artists, and albums from local Spotify history
-- Python ML artist recommender
-- Python ML track recommender
-- Recommendation filtering for songs played fewer than 10 times
-- Live Spotify filtering using saved, recently played, and top tracks
-- Liked/ignored feedback that affects future recommendations
-- Feedback analytics panel
-- Relative match scores with raw similarity shown for transparency
-- Trip playlist generator
-- Trip Group page with invite placeholders and survey-only members
-- Artist preference survey: click `Like` or `Ignore`, minimum 5 choices
-- Spotify playlist creation for generated trip playlists
-- Artist pages and Spotify search integration
-
----
-
-## Machine Learning Concepts Practiced
-
-- Feature engineering with Pandas
-- Multiple-feature recommendation scoring
-- Feature scaling with scikit-learn
-- NumPy vector creation and averaging
-- Cosine similarity
-- User taste vectors
-- Skip-rate and listen-strength features
-- Recency scoring
-- Feedback-based reranking
+- FastAPI ML backend for analytics and recommendations
+- Pandas feature tables for track and artist behavior
+- NumPy user taste vectors and weighted averaging
+- scikit-learn `StandardScaler`
+- Cosine similarity ranking
+- Feedback-aware artist/track reranking
+- Underplayed-track filtering
+- Skip-rate, listen-strength, recency, and completion signals
 - Recommendation evaluation metrics
-- Group recommendation design
-
----
+- Spotify OAuth callback flow and Spotify Web API integration
+- Cached artwork/ranking lookups in the frontend
+- Trip playlist generation and survey-based preference inputs
 
 ## Tech Stack
 
 - React + Vite
-- Tailwind CSS
 - React Router
-- Spotify Web API
+- Tailwind CSS
+- Recharts
 - FastAPI
+- Python
 - Pandas
 - NumPy
 - scikit-learn
-- Node.js / Express for existing AI/LLM utilities
+- Spotify Web API
+- Node.js / Express and OpenAI utility endpoint
+- Vercel configuration
 
----
+## Architecture / How It Works
 
-## Project Structure
-
-```txt
-src/
-  pages/
-    Dashboard.jsx
-    Recommendations.jsx
-    Trip.jsx
-    Model.jsx
-  components/
-    trip/
-      ArtistPreferenceSurvey.jsx
-  services/
-    mlApi.js
-    spotifyApi.js
-    spotifyAuth.js
-  data/
-    spotify-history/
-
-backend-ml/
-  main.py
-  services/
-    spotify_parser.py
-    recommender.py
-  experiments/
-    recommendation_experiment.py
-  data/
-    private/
+```text
+Spotify history JSON + live Spotify signals
+        |
+        v
+FastAPI ML backend
+        |
+        v
+Pandas feature engineering
+        |
+        v
+Scaled feature matrix + user taste vector
+        |
+        v
+Cosine similarity + quality signals + feedback reranking
+        |
+        v
+React dashboard and recommendation UI
 ```
 
----
+Important modules:
 
-## How To Run
+- `backend-ml/main.py` exposes analytics, recommendation, and listening-sync endpoints.
+- `backend-ml/services/spotify_parser.py` loads, cleans, filters, deduplicates, and ranks listening history.
+- `backend-ml/services/recommender.py` builds feature tables, user vectors, similarity scores, quality scores, and final ranked recommendations.
+- `backend-ml/services/listening_sync.py` stores recent live Spotify plays locally and merges them with exported history.
+- `src/services/mlApi.js` connects the React app to the ML backend and demo fallback data.
+- `src/pages/Dashboard.jsx` renders analytics, rank movement, artwork lookup, and listening summaries.
+- `src/pages/Recommendations.jsx` renders recommendation cards, feedback actions, scoring explanations, and trip playlist flows.
 
-### 1. Install frontend dependencies
+## Screenshots
+
+Screenshots are not committed yet. Recommended captures:
+
+- Listening analytics dashboard
+- Track recommendation cards with score breakdown
+- Artist recommendations
+- Feedback analytics / ranking movement
+- Trip playlist page
+
+## Setup
+
+### Frontend
 
 ```bash
 npm install
+npm run dev
 ```
 
-### 2. Start the Python ML backend
+### ML Backend
 
 ```bash
 cd backend-ml
@@ -123,110 +105,70 @@ uvicorn main:app --reload --port 8001
 
 The backend runs at:
 
-```txt
+```text
 http://127.0.0.1:8001
 ```
 
-### 3. Start the React frontend
-
-From the project root:
+Optional frontend environment variable:
 
 ```bash
-npm run dev
+VITE_ML_API_URL=http://127.0.0.1:8001
 ```
 
-Open the Vite URL shown in the terminal, usually:
+### Spotify Login
 
-```txt
-http://127.0.0.1:5173
+Public demo pages do not require Spotify login. Spotify login is needed for live Spotify data, artwork/search helpers, and private playlist creation.
+
+The callback route is:
+
+```text
+/callback
 ```
 
-or:
+For the deployed demo referenced in the app, the Spotify Developer Dashboard redirect URI must be:
 
-```txt
-http://127.0.0.1:5174
+```text
+https://spotify-ai-sooty.vercel.app/callback
 ```
 
----
+For local development, use the exact Vite origin:
 
-## Spotify Login Notes
-
-Some features require Spotify authentication:
-
-- Artist search
-- Followed artist filtering
-- Recently played/top/saved track signals
-- Creating private Spotify playlists
-
-Current scopes include:
-
-```txt
-user-read-private
-user-read-email
-user-library-read
-user-follow-read
-user-top-read
-user-read-recently-played
-playlist-modify-private
-user-read-playback-state
-user-modify-playback-state
+```text
+http://127.0.0.1:5173/callback
+http://127.0.0.1:5174/callback
 ```
-
-If a Spotify feature fails after scope changes, log in again so Spotify grants the new permissions.
-
----
 
 ## ML Backend Endpoints
 
-```txt
-GET /health
-GET /analytics/dashboard
-GET /recommendations/artists
-GET /recommendations/tracks
-GET /recommendations/trip-playlists
-GET /recommendations/artist-features
-GET /recommendations/user-vector-artists
+```text
+GET  /health
+GET  /analytics/dashboard
+GET  /recommendations/artists
+GET  /recommendations/tracks
+GET  /recommendations/trip-playlists
+GET  /recommendations/artist-features
+GET  /recommendations/user-vector-artists
+POST /listening/recently-played
+GET  /listening/status
+GET  /listening/recently-played
 ```
 
----
+## What This Demonstrates
 
-## Experiments
+- Recommendation-system feature engineering from real behavior logs
+- User-vector modeling with Pandas, NumPy, and scikit-learn
+- Cosine similarity ranking plus quality/novelty/recency signals
+- Feedback-aware reranking and explainable recommendations
+- Full-stack ML product architecture with React and FastAPI
+- Practical handling of partial live API data versus exported history
 
-Run the recommendation experiment from `backend-ml`:
-
-```bash
-venv/bin/python experiments/recommendation_experiment.py
-```
-
-This script demonstrates the core ML flow:
-
-```txt
-load data -> build features -> scale features -> build user vector -> cosine similarity -> rank recommendations
-```
-
----
-
-## Current Limitations
-
-- Exact song play counts are based on exported Spotify history snapshots.
-- Live Spotify API data is partial and cannot replace full historical play counts.
-- Trip playlists currently use the available backend data; true multi-user scoring is the next backend step.
-- Email invites are placeholders stored locally; no real invite email is sent yet.
-- Survey-only trip members are saved locally, but backend group scoring is not connected yet.
-
----
-
-## Next Planned Work
+## Roadmap
 
 - Backend group recommendation scoring from multiple member profiles
-- Real invite and consent flow
-- Persist feedback and trip members in a database
-- Use survey-only member preferences in trip playlist generation
-- Add richer track metadata when available
-- Improve evaluation metrics for recommendation quality over time
+- Persistent feedback and trip member storage
+- Richer metadata features when available
+- More formal recommendation evaluation over time
 
----
+## Notes
 
-## Credits
-
-Base project adapted from a template by Rizik, with significant customization, analytics features, recommendation-system logic, and ML-oriented extensions added.
+Exact lifetime per-track play counts depend on exported Spotify history files because the public Spotify Web API does not expose full lifetime listening history.

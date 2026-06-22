@@ -1,5 +1,6 @@
-const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-const REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI;
+const env = import.meta.env || {};
+const CLIENT_ID = env.VITE_SPOTIFY_CLIENT_ID;
+const CONFIGURED_REDIRECT_URI = env.VITE_SPOTIFY_REDIRECT_URI;
 const SCOPES = [
   "user-read-private",
   "user-read-email",
@@ -14,6 +15,63 @@ const SCOPES = [
   "user-read-playback-state",
   "user-modify-playback-state",
 ].join(" ");
+
+function isLoopbackOrigin(origin) {
+  return /^https?:\/\/(?:127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(
+    String(origin || ""),
+  );
+}
+
+export function getSpotifyRedirectUri({
+  configuredRedirectUri = CONFIGURED_REDIRECT_URI,
+  origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "",
+} = {}) {
+  const runtimeRedirectUri = origin ? `${origin}/callback` : "";
+  const configuredValue = String(configuredRedirectUri || "").trim();
+
+  if (!runtimeRedirectUri) {
+    return configuredValue;
+  }
+
+  if (!configuredValue) {
+    return runtimeRedirectUri;
+  }
+
+  try {
+    const configuredUrl = new URL(configuredValue);
+    const runtimeUrl = new URL(runtimeRedirectUri);
+
+    if (configuredUrl.origin === runtimeUrl.origin) {
+      return `${runtimeUrl.origin}/callback`;
+    }
+
+    if (isLoopbackOrigin(runtimeUrl.origin)) {
+      return runtimeRedirectUri;
+    }
+
+    return runtimeRedirectUri;
+  } catch {
+    return runtimeRedirectUri;
+  }
+}
+
+export function getSpotifyAuthConfigError({
+  clientId = CLIENT_ID,
+  redirectUri = getSpotifyRedirectUri(),
+} = {}) {
+  if (!clientId) {
+    return "Spotify Client ID is not configured.";
+  }
+
+  if (!redirectUri) {
+    return "Spotify redirect URI is not configured.";
+  }
+
+  return "";
+}
 
 export function generateCodeVerifier(length = 128) {
   const chars =
@@ -38,24 +96,43 @@ export async function generateCodeChallenge(codeVerifier) {
     .replace(/=+$/, "");
 }
 
-if (!CLIENT_ID || !REDIRECT_URI) {
-  throw new Error(
-    "Missing VITE_SPOTIFY_CLIENT_ID or VITE_SPOTIFY_REDIRECT_URI"
-  );
-}
-
-export async function redirectToSpotifyLogin() {
-  const codeVerifier = generateCodeVerifier();
-  const codeChallenge = await generateCodeChallenge(codeVerifier);
-  sessionStorage.setItem("spotify_code_verifier", codeVerifier);
+export function buildSpotifyAuthorizeUrl({
+  clientId = CLIENT_ID,
+  redirectUri = getSpotifyRedirectUri(),
+  codeChallenge,
+  scopes = SCOPES,
+}) {
   const params = new URLSearchParams({
-    client_id: CLIENT_ID,
+    client_id: clientId,
     response_type: "code",
-    redirect_uri: REDIRECT_URI,
-    scope: SCOPES,
+    redirect_uri: redirectUri,
+    scope: scopes,
     code_challenge_method: "S256",
     code_challenge: codeChallenge,
   });
-  window.location.href =
-    "https://accounts.spotify.com/authorize?" + params.toString();
+
+  return new URL(`https://accounts.spotify.com/authorize?${params.toString()}`);
+}
+
+export async function redirectToSpotifyLogin() {
+  const redirectUri = getSpotifyRedirectUri();
+  const configError = getSpotifyAuthConfigError({
+    clientId: CLIENT_ID,
+    redirectUri,
+  });
+
+  if (configError) {
+    throw new Error(configError);
+  }
+
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
+  sessionStorage.setItem("spotify_code_verifier", codeVerifier);
+  sessionStorage.setItem("spotify_redirect_uri", redirectUri);
+  const authorizeUrl = buildSpotifyAuthorizeUrl({
+    clientId: CLIENT_ID,
+    redirectUri,
+    codeChallenge,
+  });
+  window.location.href = authorizeUrl.toString();
 }

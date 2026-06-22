@@ -29,6 +29,7 @@ app = FastAPI(title="Spotify AI ML Backend")
 
 
 class SyncedPlay(BaseModel):
+    play_key: Optional[str] = ""
     track_id: Optional[str] = ""
     track_name: str
     artist_name: str

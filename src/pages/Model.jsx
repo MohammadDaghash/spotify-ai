@@ -31,10 +31,10 @@ function Model() {
 
             <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <ModelCard title="1. Feature Vector">
-                Each song is represented as a vector of numerical features:
-                genre indicators, mood indicators, popularity, and recency. This
-                lets the model compare songs mathematically instead of only
-                using names or artists.
+                Each song is represented as a dynamic normalized vector:
+                weighted genres, weighted moods, popularity, and recency. The
+                vector dimensions are built from the available catalog instead
+                of being hard-coded.
               </ModelCard>
 
               <ModelCard title="2. Cosine Similarity">
@@ -50,17 +50,19 @@ function Model() {
               <ModelCard title="3. Hybrid Recommendation Score">
                 Final ranking combines multiple signals:
                 <ul className="list-disc list-inside mt-3 space-y-1">
-                  <li>55% vector similarity</li>
-                  <li>25% artist affinity</li>
-                  <li>10% popularity</li>
-                  <li>10% recency</li>
+                  <li>Vector similarity</li>
+                  <li>Artist affinity</li>
+                  <li>Genre and mood affinity</li>
+                  <li>Novelty and recency</li>
+                  <li>Popularity debiasing</li>
                 </ul>
               </ModelCard>
 
               <ModelCard title="4. Feedback Learning">
                 When the user clicks “Add to Library”, the system updates the
-                taste profile by adding the song’s artist, genres, and moods.
-                This creates a simple adaptive recommendation loop.
+                taste profile by increasing artist, genre, and mood weights.
+                Recent and stronger interactions carry more weight than weak or
+                stale interactions.
               </ModelCard>
 
               <ModelCard title="5. Precision@K">
@@ -85,6 +87,19 @@ function Model() {
               <ModelCard title="8. Artist Diversity">
                 Measures whether recommendations come from different artists
                 instead of repeating the same artist again and again.
+              </ModelCard>
+
+              <ModelCard title="9. Recall & NDCG">
+                Recall@K checks how many relevant songs were recovered. NDCG
+                rewards the model for ranking relevant songs near the top,
+                making it better suited for recommendation quality than accuracy
+                alone.
+              </ModelCard>
+
+              <ModelCard title="10. Reranking">
+                After scoring, the engine reranks results with diversity and
+                novelty constraints so the list does not over-repeat one artist
+                or only recommend globally popular songs.
               </ModelCard>
             </section>
           </div>

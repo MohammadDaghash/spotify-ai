@@ -27,5 +27,7 @@ dist-ssr
 
 backend-ml/data/private/
 backend-ml/data/live/
+src/data/spotify-history/
 __pycache__/
 *.pyc
+.vercel

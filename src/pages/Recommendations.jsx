@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
+import AdminGateModal from "../components/AdminGateModal.jsx";
+import RankMovementBadge from "../components/RankMovementBadge.jsx";
 
 import { useSpotifyContext } from "../context/SpotifyContext.jsx";
 
@@ -12,7 +14,19 @@ import {
   getTrackRecommendations,
   getTripPlaylists,
 } from "../services/mlApi.js";
+import { isAdmin } from "../utils/adminAuth.js";
 import { buildDynamicUserProfile } from "../utils/featureEngineering.js";
+import { hasSpotifyAccessToken } from "../utils/spotifySession.js";
+import { addRankMovementToRows } from "../utils/rankMovement.js";
+import {
+  getVisibleArtistRecommendations,
+  getVisibleSongRecommendations,
+} from "../utils/recommendationLists.js";
+
+const ARTIST_RECOMMENDATION_RANKING_KEY =
+  "spotify_ai_previous_artist_recommendation_ranking";
+const SONG_RECOMMENDATION_RANKING_KEY =
+  "spotify_ai_previous_song_recommendation_ranking";
 
 function StatCard({ title, value, subtitle }) {
   return (
@@ -20,6 +34,69 @@ function StatCard({ title, value, subtitle }) {
       <p className="text-sm text-gray-400">{title}</p>
       <h3 className="text-2xl font-bold mt-1">{value}</h3>
       <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
+    </div>
+  );
+}
+
+function getNumericScore(value) {
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function formatScore(value) {
+  const numericValue = getNumericScore(value);
+
+  if (numericValue === null) return "—";
+
+  return `${Math.round(numericValue * 100)}%`;
+}
+
+function ScoreBar({ label, value, tone = "green" }) {
+  const numericValue = getNumericScore(value);
+  const width = numericValue === null ? 0 : Math.min(100, Math.max(0, numericValue * 100));
+  const toneClass =
+    tone === "red"
+      ? "bg-red-400"
+      : tone === "blue"
+        ? "bg-sky-400"
+        : tone === "amber"
+          ? "bg-amber-300"
+          : "bg-[#1db954]";
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-3 text-xs mb-1">
+        <span className="text-gray-400 truncate">{label}</span>
+        <span className="text-gray-300 shrink-0">{formatScore(value)}</span>
+      </div>
+      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+        <div
+          className={`${toneClass} h-full rounded-full`}
+          style={{ width: `${width}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ModelBreakdown({ signals }) {
+  const visibleSignals = signals.filter(
+    (signal) => getNumericScore(signal.value) !== null,
+  );
+
+  if (visibleSignals.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-3 mt-3">
+      {visibleSignals.map((signal) => (
+        <ScoreBar
+          key={signal.label}
+          label={signal.label}
+          value={signal.value}
+          tone={signal.tone}
+        />
+      ))}
     </div>
   );
 }
@@ -41,6 +118,22 @@ function getStoredList(key) {
     return JSON.parse(localStorage.getItem(key) || "[]");
   } catch {
     return [];
+  }
+}
+
+function storeRankingRows(key, rows) {
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify(
+        rows.map((row, index) => ({
+          ...row,
+          rank: Number(row.rank || index + 1),
+        })),
+      ),
+    );
+  } catch {
+    // Local ranking history is optional. Ignore storage failures.
   }
 }
 
@@ -150,6 +243,9 @@ function Recommendations() {
   const [likedSongs, setLikedSongs] = useState(() =>
     getStoredList("spotify_ai_liked_songs"),
   );
+  const [savedSongs, setSavedSongs] = useState(() =>
+    getStoredList("spotify_ai_saved_song_recommendations"),
+  );
   const [userTasteProfile, setUserTasteProfile] = useState(
     buildDynamicUserProfile(candidateTracks),
   );
@@ -164,11 +260,45 @@ function Recommendations() {
   const [likedArtists, setLikedArtists] = useState(() =>
     getStoredList("spotify_ai_liked_artists"),
   );
+  const [savedArtists, setSavedArtists] = useState(() =>
+    getStoredList("spotify_ai_saved_artist_recommendations"),
+  );
   const [liveKnownTrackSignals, setLiveKnownTrackSignals] = useState(new Map());
   const [liveTasteArtistWeights, setLiveTasteArtistWeights] = useState({});
   const [creatingPlaylistKey, setCreatingPlaylistKey] = useState("");
   const [mlError, setMlError] = useState("");
   const [mlLoading, setMlLoading] = useState(false);
+  const [adminGate, setAdminGate] = useState({
+    isOpen: false,
+    actionLabel: "",
+    action: null,
+  });
+
+  const runAdminAction = (actionLabel, action) => {
+    if (isAdmin()) {
+      action();
+      return;
+    }
+
+    setAdminGate({
+      isOpen: true,
+      actionLabel,
+      action,
+    });
+  };
+
+  const closeAdminGate = () => {
+    setAdminGate({
+      isOpen: false,
+      actionLabel: "",
+      action: null,
+    });
+  };
+
+  const approveAdminGate = () => {
+    adminGate.action?.();
+    closeAdminGate();
+  };
 
   const applyTrackFeedback = (track, sentiment) => {
     const isLike = sentiment === "like";
@@ -233,7 +363,7 @@ function Recommendations() {
         if (spotifyWindow) {
           spotifyWindow.location.href = spotifyUrl;
         } else {
-          window.location.href = spotifyUrl;
+          window.location.assign(spotifyUrl);
         }
       } else {
         if (spotifyWindow) {
@@ -259,6 +389,13 @@ function Recommendations() {
 
   useEffect(() => {
     localStorage.setItem(
+      "spotify_ai_saved_song_recommendations",
+      JSON.stringify(savedSongs),
+    );
+  }, [savedSongs]);
+
+  useEffect(() => {
+    localStorage.setItem(
       "spotify_ai_ignored_songs",
       JSON.stringify(ignoredSongs),
     );
@@ -270,6 +407,13 @@ function Recommendations() {
       JSON.stringify(likedArtists),
     );
   }, [likedArtists]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "spotify_ai_saved_artist_recommendations",
+      JSON.stringify(savedArtists),
+    );
+  }, [savedArtists]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -303,9 +447,7 @@ function Recommendations() {
         ] =
           await Promise.all([
             getArtistRecommendations({
-              topN: 20,
-              likedArtists,
-              ignoredArtists,
+              topN: 50,
             }),
             getTrackRecommendations({
               topN: 30,
@@ -321,15 +463,16 @@ function Recommendations() {
             }),
           ]);
 
+        const canUseSpotifyApi = hasSpotifyAccessToken();
         let followed = [];
 
-        if (typeof getFollowedArtists === "function") {
+        if (canUseSpotifyApi && typeof getFollowedArtists === "function") {
           followed = await getFollowedArtists();
         }
 
         let liveKnownTracks = new Map();
 
-        if (typeof getLiveListeningSignals === "function") {
+        if (canUseSpotifyApi && typeof getLiveListeningSignals === "function") {
           const liveSignals = await getLiveListeningSignals();
           const nextLiveTasteArtistWeights = {};
 
@@ -404,25 +547,40 @@ function Recommendations() {
   ]);
 
   const filteredArtistRecommendations = useMemo(() => {
-    const followedArtistNames = new Set(
-      followedArtists.map((artist) => artist.name?.toLowerCase()),
-    );
-
-    return artistRecommendations.filter(
-      (rec) =>
-        !followedArtistNames.has(rec.artist?.toLowerCase()) &&
-        !ignoredArtists.includes(rec.artist) &&
-        !likedArtists.includes(rec.artist),
-    );
+    return getVisibleArtistRecommendations({
+      recommendations: artistRecommendations,
+      likedArtists,
+      ignoredArtists,
+      followedArtists,
+      limit: visibleRecommendationCount,
+    });
   }, [artistRecommendations, followedArtists, ignoredArtists, likedArtists]);
 
-  const visibleArtistRecommendations = filteredArtistRecommendations.slice(
-    0,
-    visibleRecommendationCount,
-  );
+  const visibleArtistRecommendations = filteredArtistRecommendations;
 
   const visibleArtistRecommendationsWithDisplayScores = useMemo(() => {
-    return addRelativeMatchScores(visibleArtistRecommendations);
+    const currentRows = addRelativeMatchScores(visibleArtistRecommendations).map(
+      (artist, index) => ({
+        ...artist,
+        rank: index + 1,
+      }),
+    );
+
+    return addRankMovementToRows(
+      currentRows,
+      getStoredList(ARTIST_RECOMMENDATION_RANKING_KEY),
+      ["artist"],
+    );
+  }, [visibleArtistRecommendations]);
+
+  useEffect(() => {
+    storeRankingRows(
+      ARTIST_RECOMMENDATION_RANKING_KEY,
+      visibleArtistRecommendations.map((artist, index) => ({
+        artist: artist.artist,
+        rank: index + 1,
+      })),
+    );
   }, [visibleArtistRecommendations]);
 
   const effectiveUserTasteProfile = useMemo(() => {
@@ -449,6 +607,14 @@ function Recommendations() {
         ...track,
         trackName,
         artistName,
+        similarityScore: track.similarity_score,
+        rawSimilarityScore: track.raw_similarity_score,
+        qualityScore: track.quality_score,
+        confidence: track.confidence,
+        recencyScore: track.recency_score,
+        diversityPenalty: track.diversity_penalty,
+        knownTrackPenalty: track.known_track_penalty,
+        recentListenStrength: track.recent_listen_strength,
         historyPlayCount: track.streams || 0,
         liveKnownReason:
           liveKnownTrackSignals.get(
@@ -459,30 +625,54 @@ function Recommendations() {
   }, [trackRecommendations, liveKnownTrackSignals]);
 
   const eligibleSongRecommendations = useMemo(() => {
-    return recommendationsWithPlayCounts.filter(
-      (track) =>
-        track.historyPlayCount < maxRecommendedTrackPlays &&
-        !track.liveKnownReason,
-    );
+    return getVisibleSongRecommendations({
+      recommendations: recommendationsWithPlayCounts,
+      maxPlayCount: maxRecommendedTrackPlays,
+      limit: recommendationsWithPlayCounts.length,
+    });
   }, [recommendationsWithPlayCounts, maxRecommendedTrackPlays]);
 
   const rankedRecommendations = useMemo(() => {
-    return eligibleSongRecommendations
-      .filter((track) => !ignoredSongs.includes(track.trackName))
-      .filter((track) => !likedSongs.includes(track.trackName));
+    return getVisibleSongRecommendations({
+      recommendations: eligibleSongRecommendations,
+      likedSongs,
+      ignoredSongs,
+      maxPlayCount: maxRecommendedTrackPlays,
+      limit: visibleRecommendationCount,
+    });
   }, [
     eligibleSongRecommendations,
     ignoredSongs,
     likedSongs,
+    maxRecommendedTrackPlays,
   ]);
 
-  const visibleSongRecommendations = rankedRecommendations.slice(
-    0,
-    visibleRecommendationCount,
-  );
+  const visibleSongRecommendations = rankedRecommendations;
 
   const visibleSongRecommendationsWithDisplayScores = useMemo(() => {
-    return addRelativeMatchScores(visibleSongRecommendations);
+    const currentRows = addRelativeMatchScores(visibleSongRecommendations).map(
+      (track, index) => ({
+        ...track,
+        rank: index + 1,
+      }),
+    );
+
+    return addRankMovementToRows(
+      currentRows,
+      getStoredList(SONG_RECOMMENDATION_RANKING_KEY),
+      ["trackName", "artistName"],
+    );
+  }, [visibleSongRecommendations]);
+
+  useEffect(() => {
+    storeRankingRows(
+      SONG_RECOMMENDATION_RANKING_KEY,
+      visibleSongRecommendations.map((track, index) => ({
+        trackName: track.trackName,
+        artistName: track.artistName,
+        rank: index + 1,
+      })),
+    );
   }, [visibleSongRecommendations]);
 
   const evaluationMetrics = calculateDiscoveryMetrics({
@@ -529,6 +719,14 @@ function Recommendations() {
 
   return (
     <div className="h-screen bg-black flex flex-col">
+      <AdminGateModal
+        actionLabel={adminGate.actionLabel}
+        isOpen={adminGate.isOpen}
+        message="Admin login required for editing recommendations."
+        onApproved={approveAdminGate}
+        onClose={closeAdminGate}
+      />
+
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">
@@ -572,15 +770,56 @@ function Recommendations() {
                   >
                     <div>
                       <p className="font-semibold">
-                        #{index + 1} {artist.artist}
+                        <span className="inline-flex items-center gap-2">
+                          <span>#{index + 1}</span>
+                          <RankMovementBadge row={artist} />
+                          <span>{artist.artist}</span>
+                        </span>
                       </p>
 
                       <p className="text-sm text-gray-400">
                         Relative match: {artist.relativeMatch}%
                       </p>
-                      <p className="text-xs text-gray-500">
-                        Raw similarity: {artist.score}
-                      </p>
+
+                      <ModelBreakdown
+                        signals={[
+                          {
+                            label: "Model score",
+                            value: artist.score,
+                          },
+                          {
+                            label: "Similarity",
+                            value: artist.similarity_score,
+                            tone: "blue",
+                          },
+                          {
+                            label: "Quality",
+                            value: artist.quality_score,
+                          },
+                          {
+                            label: "Confidence",
+                            value: artist.confidence,
+                            tone: "amber",
+                          },
+                          {
+                            label: "Recency",
+                            value: artist.recency_score,
+                            tone: "blue",
+                          },
+                          {
+                            label: "Known penalty",
+                            value: artist.known_artist_penalty,
+                            tone: "red",
+                          },
+                        ]}
+                      />
+
+                      {artist.raw_similarity_score !== undefined && (
+                        <p className="text-xs text-gray-600 mt-2">
+                          Raw cosine: {artist.raw_similarity_score}
+                        </p>
+                      )}
+
                       <p className="text-sm text-gray-500">{artist.reason}</p>
                     </div>
 
@@ -601,9 +840,27 @@ function Recommendations() {
 
                         <button
                           onClick={() =>
-                            setLikedArtists((prev) => [
-                              ...new Set([...prev, artist.artist]),
-                            ])
+                            runAdminAction(`save ${artist.artist}`, () =>
+                              setSavedArtists((prev) => [
+                                ...new Set([...prev, artist.artist]),
+                              ]),
+                            )
+                          }
+                          disabled={savedArtists.includes(artist.artist)}
+                          className="bg-[#3b82f6] disabled:bg-[#2a2a2a] disabled:text-gray-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full"
+                        >
+                          {savedArtists.includes(artist.artist)
+                            ? "Saved"
+                            : "Save"}
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            runAdminAction(`mark ${artist.artist} as liked`, () =>
+                              setLikedArtists((prev) => [
+                                ...new Set([...prev, artist.artist]),
+                              ]),
+                            )
                           }
                           className="bg-white text-black text-xs font-semibold px-3 py-1.5 rounded-full"
                         >
@@ -612,9 +869,11 @@ function Recommendations() {
 
                         <button
                           onClick={() =>
-                            setIgnoredArtists((prev) => [
-                              ...new Set([...prev, artist.artist]),
-                            ])
+                            runAdminAction(`ignore ${artist.artist}`, () =>
+                              setIgnoredArtists((prev) => [
+                                ...new Set([...prev, artist.artist]),
+                              ]),
+                            )
                           }
                           className="bg-[#2a2a2a] text-white text-xs px-3 py-1.5 rounded-full"
                         >
@@ -779,7 +1038,11 @@ function Recommendations() {
                       </div>
 
                       <button
-                        onClick={() => createTripPlaylist(playlistKey, playlist)}
+                        onClick={() =>
+                          runAdminAction(`create ${playlist.name} in Spotify`, () =>
+                            createTripPlaylist(playlistKey, playlist),
+                          )
+                        }
                         disabled={
                           creatingPlaylistKey === playlistKey ||
                           playlist.tracks.length === 0
@@ -806,7 +1069,11 @@ function Recommendations() {
                 >
                   <div className="flex justify-between gap-4">
                     <div>
-                      <h3 className="font-bold">{rec.trackName}</h3>
+                      <h3 className="font-bold flex items-center gap-2">
+                        <span>#{rec.rank}</span>
+                        <RankMovementBadge row={rec} />
+                        <span>{rec.trackName}</span>
+                      </h3>
                       <p className="text-sm text-gray-400">{rec.artistName}</p>
                     </div>
 
@@ -816,9 +1083,53 @@ function Recommendations() {
                   </div>
 
                   <p className="text-sm text-gray-300 mt-3">{rec.reason}</p>
-                  <p className="text-xs text-gray-500 mt-2">
+
+                  <ModelBreakdown
+                    signals={[
+                      {
+                        label: "Model score",
+                        value: rec.score,
+                      },
+                      {
+                        label: "Similarity",
+                        value: rec.similarityScore,
+                        tone: "blue",
+                      },
+                      {
+                        label: "Quality",
+                        value: rec.qualityScore,
+                      },
+                      {
+                        label: "Confidence",
+                        value: rec.confidence,
+                        tone: "amber",
+                      },
+                      {
+                        label: "Recency",
+                        value: rec.recencyScore,
+                        tone: "blue",
+                      },
+                      {
+                        label: "Known penalty",
+                        value: rec.knownTrackPenalty,
+                        tone: "red",
+                      },
+                      {
+                        label: "Diversity penalty",
+                        value: rec.diversityPenalty,
+                        tone: "red",
+                      },
+                    ]}
+                  />
+
+                  <p className="text-xs text-gray-500 mt-3">
                     Played {rec.historyPlayCount} times in your exported history
-                    {" "}• Raw similarity: {rec.score}
+                    {rec.recentListenStrength !== undefined
+                      ? ` • Recent strength: ${rec.recentListenStrength}`
+                      : ""}
+                    {rec.rawSimilarityScore !== undefined
+                      ? ` • Raw cosine: ${rec.rawSimilarityScore}`
+                      : ""}
                   </p>
 
                   <div className="flex gap-2 mt-4">
@@ -834,14 +1145,45 @@ function Recommendations() {
                     </a>
 
                     <button
-                      onClick={() => applyTrackFeedback(rec, "like")}
+                      onClick={() =>
+                        runAdminAction(`save ${rec.trackName}`, () =>
+                          setSavedSongs((prev) => [
+                            ...new Set([
+                              ...prev,
+                              getTrackHistoryKey(rec.trackName, rec.artistName),
+                            ]),
+                          ]),
+                        )
+                      }
+                      disabled={savedSongs.includes(
+                        getTrackHistoryKey(rec.trackName, rec.artistName),
+                      )}
+                      className="bg-[#3b82f6] disabled:bg-[#2a2a2a] disabled:text-gray-500 text-white text-sm font-semibold px-3 py-1.5 rounded-full"
+                    >
+                      {savedSongs.includes(
+                        getTrackHistoryKey(rec.trackName, rec.artistName),
+                      )
+                        ? "Saved"
+                        : "Save"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAdminAction(`mark ${rec.trackName} as liked`, () =>
+                          applyTrackFeedback(rec, "like"),
+                        )
+                      }
                       className="bg-white text-black text-sm font-semibold px-3 py-1.5 rounded-full"
                     >
                       Liked
                     </button>
 
                     <button
-                      onClick={() => applyTrackFeedback(rec, "ignore")}
+                      onClick={() =>
+                        runAdminAction(`ignore ${rec.trackName}`, () =>
+                          applyTrackFeedback(rec, "ignore"),
+                        )
+                      }
                       className="bg-[#2a2a2a] text-white text-sm px-3 py-1.5 rounded-full"
                     >
                       Ignore

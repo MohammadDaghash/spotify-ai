@@ -1,19 +1,30 @@
-const ML_API_BASE_URL =
-  import.meta.env.VITE_ML_API_URL || "http://127.0.0.1:8001";
+import {
+  demoArtistRecommendations,
+  demoGroupPlaylists,
+  demoTrackRecommendations,
+} from "../data/demoRecommendations.js";
 
-const dashboardCache = new Map();
+const ML_API_BASE_URL =
+  import.meta.env.VITE_ML_API_URL ||
+  (import.meta.env.DEV ? "http://127.0.0.1:8001" : "");
+
+function cloneDemoData(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+
+function getMlApiBaseUrl() {
+  if (!ML_API_BASE_URL) {
+    throw new Error("ML backend URL is not configured for this deployment");
+  }
+
+  return ML_API_BASE_URL;
+}
 
 export async function getMlDashboardAnalytics(
   sortBy = "minutes",
   timeRange = "all",
   selectedYear = "all",
 ) {
-  const cacheKey = `${sortBy}-${timeRange}-${selectedYear}`;
-
-  if (dashboardCache.has(cacheKey)) {
-    return dashboardCache.get(cacheKey);
-  }
-
   const params = new URLSearchParams({
     sort_by: sortBy,
     time_range: timeRange,
@@ -21,21 +32,18 @@ export async function getMlDashboardAnalytics(
   });
 
   const response = await fetch(
-    `${ML_API_BASE_URL}/analytics/dashboard?${params.toString()}`,
+    `${getMlApiBaseUrl()}/analytics/dashboard?${params.toString()}`,
   );
 
   if (!response.ok) {
     throw new Error("Failed to fetch ML dashboard analytics");
   }
 
-  const data = await response.json();
-  dashboardCache.set(cacheKey, data);
-
-  return data;
+  return response.json();
 }
 
 export async function syncRecentlyPlayed(plays = []) {
-  const response = await fetch(`${ML_API_BASE_URL}/listening/recently-played`, {
+  const response = await fetch(`${getMlApiBaseUrl()}/listening/recently-played`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -47,17 +55,11 @@ export async function syncRecentlyPlayed(plays = []) {
     throw new Error("Failed to sync recently played tracks");
   }
 
-  const data = await response.json();
-
-  if (data?.sync?.inserted > 0) {
-    dashboardCache.clear();
-  }
-
-  return data;
+  return response.json();
 }
 
 export async function getListeningSyncStatus() {
-  const response = await fetch(`${ML_API_BASE_URL}/listening/status`);
+  const response = await fetch(`${getMlApiBaseUrl()}/listening/status`);
 
   if (!response.ok) {
     throw new Error("Failed to fetch listening sync status");
@@ -71,6 +73,16 @@ export async function getArtistRecommendations({
   likedArtists = [],
   ignoredArtists = [],
 } = {}) {
+  if (!ML_API_BASE_URL) {
+    const excludedArtists = new Set([...likedArtists, ...ignoredArtists]);
+
+    return {
+      recommendations: cloneDemoData(demoArtistRecommendations)
+        .filter((artist) => !excludedArtists.has(artist.artist))
+        .slice(0, topN),
+    };
+  }
+
   const params = new URLSearchParams({
     top_n: topN,
   });
@@ -84,7 +96,7 @@ export async function getArtistRecommendations({
   });
 
   const response = await fetch(
-    `${ML_API_BASE_URL}/recommendations/artists?${params.toString()}`,
+    `${getMlApiBaseUrl()}/recommendations/artists?${params.toString()}`,
   );
 
   if (!response.ok) {
@@ -100,6 +112,17 @@ export async function getTrackRecommendations({
   likedTracks = [],
   ignoredTracks = [],
 } = {}) {
+  if (!ML_API_BASE_URL) {
+    const excludedTracks = new Set([...likedTracks, ...ignoredTracks]);
+
+    return {
+      recommendations: cloneDemoData(demoTrackRecommendations)
+        .filter((track) => track.streams < maxPlayCount)
+        .filter((track) => !excludedTracks.has(track.track_name))
+        .slice(0, topN),
+    };
+  }
+
   const params = new URLSearchParams({
     top_n: topN,
     max_play_count: maxPlayCount,
@@ -114,7 +137,7 @@ export async function getTrackRecommendations({
   });
 
   const response = await fetch(
-    `${ML_API_BASE_URL}/recommendations/tracks?${params.toString()}`,
+    `${getMlApiBaseUrl()}/recommendations/tracks?${params.toString()}`,
   );
 
   if (!response.ok) {
@@ -130,6 +153,12 @@ export async function getTripPlaylists({
   surveyLikedArtists = [],
   surveyIgnoredArtists = [],
 } = {}) {
+  if (!ML_API_BASE_URL) {
+    return {
+      playlists: cloneDemoData(demoGroupPlaylists),
+    };
+  }
+
   const params = new URLSearchParams({
     limit,
     new_song_max_plays: newSongMaxPlays,
@@ -144,7 +173,7 @@ export async function getTripPlaylists({
   });
 
   const response = await fetch(
-    `${ML_API_BASE_URL}/recommendations/trip-playlists?${params.toString()}`,
+    `${getMlApiBaseUrl()}/recommendations/trip-playlists?${params.toString()}`,
   );
 
   if (!response.ok) {

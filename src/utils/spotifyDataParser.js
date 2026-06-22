@@ -1,15 +1,92 @@
+const ARTIST_CREDIT_SPLIT_PATTERN =
+  /\s*(?:,|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b)\s*/i;
+const PROTECTED_COMMA_ARTIST_NAMES = new Set(["tyler, the creator"]);
+const PROTECTED_COMMA_ARTIST_PATTERNS = [/tyler,\s*the creator/i];
+
+function normalizeArtistNameKey(artistName) {
+  return String(artistName || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function splitArtistNames(artistName) {
+  const cleanName = String(artistName || "").trim().replace(/\s+/g, " ");
+
+  if (!cleanName) return [];
+
+  if (PROTECTED_COMMA_ARTIST_NAMES.has(normalizeArtistNameKey(cleanName))) {
+    return [cleanName];
+  }
+
+  const protectedArtists = {};
+  let protectedName = cleanName;
+
+  PROTECTED_COMMA_ARTIST_PATTERNS.forEach((pattern, index) => {
+    const placeholder = `__protected_artist_${index}__`;
+
+    protectedName = protectedName.replace(pattern, (match) => {
+      protectedArtists[placeholder] = match;
+      return placeholder;
+    });
+  });
+
+  const parts = protectedName
+    .split(ARTIST_CREDIT_SPLIT_PATTERN)
+    .map((part) => protectedArtists[part.trim()] || part.trim())
+    .filter(Boolean);
+
+  return parts.length > 0 ? [...new Set(parts)] : [cleanName];
+}
+
+function getEntryTrackName(entry) {
+  return entry.master_metadata_track_name || entry.track_name || entry.trackName;
+}
+
+function getEntryArtistName(entry) {
+  return (
+    entry.master_metadata_album_artist_name ||
+    entry.artist_name ||
+    entry.artistName
+  );
+}
+
+function getEntryAlbumName(entry) {
+  return (
+    entry.master_metadata_album_album_name ||
+    entry.album_name ||
+    entry.albumName
+  );
+}
+
+function getEntryStreamCount(entry) {
+  const streamCount = Number(entry.streams || entry.play_count || 1);
+
+  return Number.isFinite(streamCount) && streamCount > 0 ? streamCount : 1;
+}
+
+function getEntryTotalMsPlayed(entry) {
+  const totalMsPlayed = Number(entry.total_ms_played);
+
+  if (Number.isFinite(totalMsPlayed) && totalMsPlayed > 0) {
+    return totalMsPlayed;
+  }
+
+  const msPlayed = Number(entry.ms_played || entry.msPlayed || 0);
+
+  return msPlayed * getEntryStreamCount(entry);
+}
+
 export function parseSpotifyHistory(rawData, sortBy = "minutes") {
   const trackMap = {};
   const artistMap = {};
   const albumMap = {};
 
   rawData.forEach((entry) => {
-    const trackName = entry.master_metadata_track_name;
-    const artistName = entry.master_metadata_album_artist_name;
-    const albumName = entry.master_metadata_album_album_name;
-    const msPlayed = Number(entry.ms_played || 0);
+    const trackName = getEntryTrackName(entry);
+    const artistName = getEntryArtistName(entry);
+    const albumName = getEntryAlbumName(entry);
+    const streamCount = getEntryStreamCount(entry);
+    const totalMsPlayed = getEntryTotalMsPlayed(entry);
 
-    if (!trackName || !artistName || !albumName || msPlayed <= 0) return;
+    if (!trackName || !artistName || !albumName || totalMsPlayed <= 0) return;
 
     const trackKey = `${trackName}-${artistName}`;
     const albumKey = `${albumName}-${artistName}`;
@@ -24,20 +101,22 @@ export function parseSpotifyHistory(rawData, sortBy = "minutes") {
       };
     }
 
-    trackMap[trackKey].totalMsPlayed += msPlayed;
-    trackMap[trackKey].streams += 1;
+    trackMap[trackKey].totalMsPlayed += totalMsPlayed;
+    trackMap[trackKey].streams += streamCount;
 
-    if (!artistMap[artistName]) {
-      artistMap[artistName] = {
-        artistName,
-        totalMsPlayed: 0,
-        streams: 0,
-        songsInLibrary: 0,
-      };
-    }
+    splitArtistNames(artistName).forEach((artistCreditName) => {
+      if (!artistMap[artistCreditName]) {
+        artistMap[artistCreditName] = {
+          artistName: artistCreditName,
+          totalMsPlayed: 0,
+          streams: 0,
+          songsInLibrary: 0,
+        };
+      }
 
-    artistMap[artistName].totalMsPlayed += msPlayed;
-    artistMap[artistName].streams += 1;
+      artistMap[artistCreditName].totalMsPlayed += totalMsPlayed;
+      artistMap[artistCreditName].streams += streamCount;
+    });
 
     if (!albumMap[albumKey]) {
       albumMap[albumKey] = {
@@ -48,8 +127,8 @@ export function parseSpotifyHistory(rawData, sortBy = "minutes") {
       };
     }
 
-    albumMap[albumKey].totalMsPlayed += msPlayed;
-    albumMap[albumKey].streams += 1;
+    albumMap[albumKey].totalMsPlayed += totalMsPlayed;
+    albumMap[albumKey].streams += streamCount;
   });
 
   const topTracks = Object.values(trackMap)
@@ -58,7 +137,7 @@ export function parseSpotifyHistory(rawData, sortBy = "minutes") {
         ? b.streams - a.streams
         : b.totalMsPlayed - a.totalMsPlayed,
     )
-    .slice(0, 20)
+    .slice(0, 100)
     .map((track, index) => ({
       ...track,
       rank: index + 1,
@@ -103,9 +182,10 @@ export function getListeningTrend(rawData, timeRange) {
 
   rawData.forEach((entry) => {
     const timestamp = entry.ts;
-    const msPlayed = Number(entry.ms_played || 0);
+    const streamCount = getEntryStreamCount(entry);
+    const totalMsPlayed = getEntryTotalMsPlayed(entry);
 
-    if (!timestamp || msPlayed <= 0) return;
+    if (!timestamp || totalMsPlayed <= 0) return;
 
     const date = new Date(timestamp);
 
@@ -140,8 +220,8 @@ export function getListeningTrend(rawData, timeRange) {
       };
     }
 
-    trendMap[key].streams += 1;
-    trendMap[key].minutesPlayed += msPlayed / 60000;
+    trendMap[key].streams += streamCount;
+    trendMap[key].minutesPlayed += totalMsPlayed / 60000;
   });
 
   return Object.values(trendMap)

@@ -20,6 +20,10 @@ function Sidebar() {
       label: "Model",
       path: "/model",
     },
+    {
+      label: "Use Your Data",
+      path: "/login",
+    },
   ];
 
   return (

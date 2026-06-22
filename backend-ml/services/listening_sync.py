@@ -7,6 +7,7 @@ import pandas as pd
 DEFAULT_LIVE_HISTORY_FILE = Path("data/live/recent_plays.json")
 
 LIVE_HISTORY_COLUMNS = [
+    "play_key",
     "ts",
     "ms_played",
     "track_name",
@@ -33,6 +34,9 @@ def _safe_int(value, default=0):
 
 
 def _play_key(play):
+    if play.get("play_key"):
+        return play["play_key"]
+
     track_identity = play.get("track_id") or "|".join(
         [
             _safe_string(play.get("track_name")).lower(),
@@ -55,6 +59,7 @@ def normalize_play(play):
     duration_ms = _safe_int(play.get("duration_ms") or play.get("ms_played"))
 
     return {
+        "play_key": _safe_string(play.get("play_key")),
         "track_id": _safe_string(play.get("track_id")),
         "track_name": track_name,
         "artist_name": artist_name,
@@ -65,6 +70,45 @@ def normalize_play(play):
         "uri": _safe_string(play.get("uri")),
         "source": _safe_string(play.get("source")) or "spotify_recently_played",
     }
+
+
+def _parsed_played_at(play):
+    try:
+        return pd.Timestamp(play.get("played_at"))
+    except (TypeError, ValueError):
+        return pd.NaT
+
+
+def _drop_nearby_current_play(merged, recent_play):
+    if recent_play.get("source") != "spotify_recently_played":
+        return
+
+    recent_track_id = recent_play.get("track_id")
+    if not recent_track_id:
+        return
+
+    recent_time = _parsed_played_at(recent_play)
+    if pd.isna(recent_time):
+        return
+
+    keys_to_drop = []
+
+    for key, existing_play in merged.items():
+        if existing_play.get("source") != "spotify_currently_playing":
+            continue
+
+        if existing_play.get("track_id") != recent_track_id:
+            continue
+
+        existing_time = _parsed_played_at(existing_play)
+        if pd.isna(existing_time):
+            continue
+
+        if abs((recent_time - existing_time).total_seconds()) <= 900:
+            keys_to_drop.append(key)
+
+    for key in keys_to_drop:
+        merged.pop(key, None)
 
 
 def read_synced_plays(storage_path=DEFAULT_LIVE_HISTORY_FILE):
@@ -111,6 +155,7 @@ def upsert_recent_plays(plays, storage_path=DEFAULT_LIVE_HISTORY_FILE):
             continue
 
         normalized_received.append(normalized)
+        _drop_nearby_current_play(merged, normalized)
         key = _play_key(normalized)
 
         if key not in merged:

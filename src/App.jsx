@@ -22,6 +22,7 @@ export default function App() {
 
       {/* Spotify auth */}
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Login />} />
       <Route path="/callback" element={<Callback />} />
 
       {/* Artist page */}

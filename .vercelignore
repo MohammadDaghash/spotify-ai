@@ -1,0 +1,10 @@
+backend-ml/venv
+backend-ml/__pycache__
+backend-ml/data/private
+backend-ml/data/live
+src/data/spotify-history
+server/node_modules
+node_modules
+dist
+.env
+.env.*

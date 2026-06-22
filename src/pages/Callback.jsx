@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { getSpotifyRedirectUri } from "../services/spotifyAuth.js";
 
-const REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI;
-const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+const env = import.meta.env || {};
+const CLIENT_ID = env.VITE_SPOTIFY_CLIENT_ID;
 const TOKEN_ENDPOINT =
-  import.meta.env.VITE_TOKEN_ENDPOINT ||
+  env.VITE_TOKEN_ENDPOINT ||
   "https://accounts.spotify.com/api/token";
 
 function Callback() {
@@ -23,9 +24,12 @@ function Callback() {
       }
 
       const codeVerifier = sessionStorage.getItem("spotify_code_verifier");
+      const redirectUri =
+        sessionStorage.getItem("spotify_redirect_uri") ||
+        getSpotifyRedirectUri();
 
-      if (!codeVerifier) {
-        console.error("Missing code verifier");
+      if (!codeVerifier || !redirectUri || !CLIENT_ID) {
+        console.error("Missing Spotify callback configuration");
         navigate("/login", { replace: true });
         return;
       }
@@ -34,7 +38,7 @@ function Callback() {
         const body = new URLSearchParams({
           grant_type: "authorization_code",
           code,
-          redirect_uri: REDIRECT_URI,
+          redirect_uri: redirectUri,
           client_id: CLIENT_ID,
           code_verifier: codeVerifier,
         });
@@ -62,6 +66,7 @@ function Callback() {
         }
 
         sessionStorage.removeItem("spotify_code_verifier");
+        sessionStorage.removeItem("spotify_redirect_uri");
 
         navigate("/dashboard", { replace: true });
       } catch (err) {

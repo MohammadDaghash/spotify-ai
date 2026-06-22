@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import spotifyApi from "../services/spotifyApi";
 import { getListeningSyncStatus, syncRecentlyPlayed } from "../services/mlApi";
 
@@ -10,6 +17,158 @@ import { getListeningSyncStatus, syncRecentlyPlayed } from "../services/mlApi";
  */
 
 const SpotifyContext = createContext(null);
+const LISTENING_SYNC_INTERVAL_MS = 30_000;
+const MIN_CURRENT_PLAY_PROGRESS_MS = 30_000;
+const ALBUM_EDITION_PATTERN =
+  /\s*(?:(?:\(|\[|\{)\s*(?:.*?\bdeluxe\b.*?|.*?\bexpanded\b.*?|.*?\bbonus\b.*?|.*?\banniversary\b.*?|.*?\bremaster(?:ed)?\b.*?|.*?\bspecial\b.*?\bedition\b.*?|.*?\bcomplete\b.*?)\s*(?:\)|\]|\})|(?:-|–|—|:)\s*(?:.*?\bdeluxe\b.*?|.*?\bexpanded\b.*?|.*?\bbonus\b.*?|.*?\banniversary\b.*?|.*?\bremaster(?:ed)?\b.*?|.*?\bspecial\b.*?\bedition\b.*?|.*?\bcomplete\b.*?)|\s+(?:\bdeluxe\b.*?|\bexpanded\b.*?|\bbonus\b.*?|\banniversary\b.*?|\bremaster(?:ed)?\b.*?|\bspecial\b.*?\bedition\b.*?|\bcomplete\b.*?))\s*$/i;
+
+function normalizeForMatch(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function namesAreCompatible(candidateName, targetName) {
+  const candidate = normalizeForMatch(candidateName);
+  const target = normalizeForMatch(targetName);
+
+  if (!candidate || !target) return false;
+  if (candidate === target) return true;
+
+  const shortestLength = Math.min(candidate.length, target.length);
+
+  if (shortestLength < 6) return false;
+
+  return (
+    candidate.startsWith(`${target} `) ||
+    target.startsWith(`${candidate} `)
+  );
+}
+
+function canonicalAlbumName(albumName) {
+  let cleanName = String(albumName || "").trim();
+  let previousName = "";
+
+  while (cleanName && previousName !== cleanName) {
+    previousName = cleanName;
+    cleanName = cleanName.replace(ALBUM_EDITION_PATTERN, "").trim();
+  }
+
+  return cleanName.replace(/\s+/g, " ").trim();
+}
+
+function splitArtistNames(artistName) {
+  return String(artistName || "")
+    .split(/\s*(?:,|&|\band\b|feat\.?|ft\.?)\s*/i)
+    .map(normalizeForMatch)
+    .filter(Boolean);
+}
+
+function getPrimaryArtistName(artistName) {
+  return (
+    String(artistName || "")
+      .split(/\s*(?:,|&|\band\b|feat\.?|ft\.?)\s*/i)
+      .map((artist) => artist.trim())
+      .filter(Boolean)[0] || String(artistName || "").trim()
+  );
+}
+
+function buildSearchPath(query, type, limit = 10) {
+  const params = new URLSearchParams({
+    q: query,
+    type,
+    limit: String(limit),
+  });
+
+  return `/search?${params.toString()}`;
+}
+
+function spotifyArtistMatches(candidateArtists = [], targetArtistName) {
+  const targetArtists = splitArtistNames(targetArtistName);
+
+  if (targetArtists.length === 0) {
+    return true;
+  }
+
+  return candidateArtists.some((artist) => {
+    const candidateName = normalizeForMatch(artist?.name);
+    return targetArtists.some((targetName) =>
+      namesAreCompatible(candidateName, targetName),
+    );
+  });
+}
+
+function pickMatchingArtist(items = [], artistName, allowFirstFallback = false) {
+  const targetName = normalizeForMatch(artistName);
+
+  return (
+    items.find((artist) => normalizeForMatch(artist?.name) === targetName) ||
+    items.find((artist) => namesAreCompatible(artist?.name, targetName)) ||
+    (allowFirstFallback ? items[0] : null) ||
+    null
+  );
+}
+
+function pickMatchingTrack(
+  items = [],
+  trackName,
+  artistName,
+  allowFirstFallback = false,
+) {
+  const targetTrack = normalizeForMatch(trackName);
+
+  return (
+    items.find((track) => {
+      return (
+        normalizeForMatch(track?.name) === targetTrack &&
+        spotifyArtistMatches(track?.artists, artistName)
+      );
+    }) ||
+    items.find((track) => {
+      return (
+        namesAreCompatible(track?.name, targetTrack) &&
+        spotifyArtistMatches(track?.artists, artistName)
+      );
+    }) ||
+    (allowFirstFallback ? items[0] : null) ||
+    null
+  );
+}
+
+function pickMatchingAlbum(
+  items = [],
+  albumName,
+  artistName,
+  allowFirstFallback = false,
+) {
+  const targetAlbum = normalizeForMatch(canonicalAlbumName(albumName));
+  const exactNameMatch = items.find((album) => {
+    return (
+      normalizeForMatch(album?.name) === targetAlbum &&
+      spotifyArtistMatches(album?.artists, artistName)
+    );
+  });
+
+  if (exactNameMatch) {
+    return exactNameMatch;
+  }
+
+  return (
+    items.find((album) => {
+      return (
+        namesAreCompatible(canonicalAlbumName(album?.name), targetAlbum) &&
+        spotifyArtistMatches(album?.artists, artistName)
+      );
+    }) ||
+    (allowFirstFallback ? items[0] : null) ||
+    null
+  );
+}
 
 function mapSpotifyTrackToSyncPlay(track, playedAt, source) {
   if (!track?.name || !track?.artists?.length || !playedAt) {
@@ -48,6 +207,38 @@ function mapCurrentlyPlaying(data) {
   };
 }
 
+function mapCurrentlyPlayingToSyncPlay(data) {
+  const track = data?.item;
+  const progressMs = data?.progress_ms || 0;
+
+  if (
+    !data?.is_playing ||
+    !track?.name ||
+    track.type !== "track" ||
+    progressMs < MIN_CURRENT_PLAY_PROGRESS_MS
+  ) {
+    return null;
+  }
+
+  const estimatedStartedAt = new Date(Date.now() - progressMs);
+  estimatedStartedAt.setSeconds(0, 0);
+  const trackId = track.id || "";
+  const playKey = `current:${trackId || track.name}:${estimatedStartedAt.toISOString()}`;
+
+  return {
+    play_key: playKey,
+    track_id: trackId,
+    track_name: track.name,
+    artist_name: track.artists?.map((artist) => artist.name).join(", ") || "",
+    album_name: track.album?.name || "",
+    played_at: estimatedStartedAt.toISOString(),
+    duration_ms: Math.min(progressMs, track.duration_ms || progressMs),
+    spotify_url: track.external_urls?.spotify || "",
+    uri: track.uri || "",
+    source: "spotify_currently_playing",
+  };
+}
+
 export function SpotifyProvider({ children }) {
   const [initials, setInitials] = useState("");
   const [tracks, setTracks] = useState([]);
@@ -81,28 +272,92 @@ export function SpotifyProvider({ children }) {
 
   // ---- Helpers for pages/components ----
 
-  const searchArtist = async (artistName) => {
+  const searchArtist = useCallback(async (artistName) => {
     const q = (artistName || "").trim();
     if (!q) return null;
 
-    const res = await spotifyApi.get(
-      `/search?q=${encodeURIComponent(q)}&type=artist&limit=1`,
-    );
-    return res.data?.artists?.items?.[0] ?? null;
-  };
+    const res = await spotifyApi.get(buildSearchPath(q, "artist", 10));
+    return pickMatchingArtist(res.data?.artists?.items, q, true);
+  }, []);
 
-  const searchTrack = async (trackName, artistName) => {
+  const searchTrack = useCallback(async (trackName, artistName) => {
     const track = (trackName || "").trim();
     const artist = (artistName || "").trim();
     if (!track) return null;
 
-    const query = artist ? `track:${track} artist:${artist}` : track;
-    const res = await spotifyApi.get(
-      `/search?q=${encodeURIComponent(query)}&type=track&limit=1`,
-    );
+    const primaryArtist = getPrimaryArtistName(artist);
+    const queries = [
+      primaryArtist ? `${track} ${primaryArtist}` : "",
+      artist && artist !== primaryArtist ? `${track} ${artist}` : "",
+      track,
+    ].filter(Boolean);
 
-    return res.data?.tracks?.items?.[0] || null;
-  };
+    for (const query of [...new Set(queries)]) {
+      const res = await spotifyApi.get(buildSearchPath(query, "track", 10));
+      const match = pickMatchingTrack(
+        res.data?.tracks?.items,
+        track,
+        artist || primaryArtist,
+      );
+
+      if (match) {
+        return match;
+      }
+    }
+
+    if (!artist) {
+      const res = await spotifyApi.get(buildSearchPath(track, "track", 10));
+      return (
+        res.data?.tracks?.items?.find((item) =>
+          namesAreCompatible(item?.name, track),
+        ) || null
+      );
+    }
+
+    return null;
+  }, []);
+
+  const searchAlbum = useCallback(async (albumName, artistName) => {
+    const album = (albumName || "").trim();
+    const artist = (artistName || "").trim();
+    if (!album) return null;
+
+    const primaryArtist = getPrimaryArtistName(artist);
+    const canonicalAlbum = canonicalAlbumName(album);
+    const queries = [
+      primaryArtist ? `${canonicalAlbum} ${primaryArtist}` : "",
+      artist && artist !== primaryArtist ? `${canonicalAlbum} ${artist}` : "",
+      canonicalAlbum,
+    ].filter(Boolean);
+
+    for (const query of [...new Set(queries)]) {
+      const res = await spotifyApi.get(buildSearchPath(query, "album", 10));
+      const match = pickMatchingAlbum(
+        res.data?.albums?.items,
+        album,
+        artist || primaryArtist,
+      );
+
+      if (match) {
+        return match;
+      }
+    }
+
+    if (!artist) {
+      const targetAlbum = normalizeForMatch(canonicalAlbumName(album));
+      const res = await spotifyApi.get(buildSearchPath(canonicalAlbum, "album", 10));
+      return (
+        res.data?.albums?.items?.find((item) =>
+          namesAreCompatible(
+            canonicalAlbumName(item?.name),
+            targetAlbum,
+          ),
+        ) || null
+      );
+    }
+
+    return null;
+  }, []);
 
   const getArtist = async (id) => {
     if (!id) return null;
@@ -139,7 +394,7 @@ export function SpotifyProvider({ children }) {
         ? recentlyPlayedResult.value.data?.items || []
         : [];
 
-    const plays = recentItems
+    const recentPlays = recentItems
       .map((item) =>
         mapSpotifyTrackToSyncPlay(
           item.track,
@@ -149,15 +404,20 @@ export function SpotifyProvider({ children }) {
       )
       .filter(Boolean);
 
+    const currentlyPlayingData =
+      currentlyPlayingResult.status === "fulfilled"
+        ? currentlyPlayingResult.value
+        : null;
+    const currentPlay = mapCurrentlyPlayingToSyncPlay(currentlyPlayingData);
+    const plays = currentPlay ? [...recentPlays, currentPlay] : recentPlays;
+
     const syncResponse =
       plays.length > 0
         ? await syncRecentlyPlayed(plays)
         : await getListeningSyncStatus();
 
     const currentlyPlaying =
-      currentlyPlayingResult.status === "fulfilled"
-        ? mapCurrentlyPlaying(currentlyPlayingResult.value)
-        : null;
+      currentlyPlayingData ? mapCurrentlyPlaying(currentlyPlayingData) : null;
 
     const nextStatus = {
       ...(syncResponse.sync || {}),
@@ -294,7 +554,10 @@ export function SpotifyProvider({ children }) {
     }
 
     runListeningSync();
-    syncIntervalId = window.setInterval(runListeningSync, 90_000);
+    syncIntervalId = window.setInterval(
+      runListeningSync,
+      LISTENING_SYNC_INTERVAL_MS,
+    );
 
     return () => {
       cancelled = true;
@@ -319,6 +582,8 @@ export function SpotifyProvider({ children }) {
 
       // helpers
       searchArtist,
+      searchTrack,
+      searchAlbum,
       getArtist,
       getArtistAlbums,
       getFollowedArtists,
