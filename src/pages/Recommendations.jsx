@@ -30,10 +30,12 @@ const SONG_RECOMMENDATION_RANKING_KEY =
 
 function StatCard({ title, value, subtitle }) {
   return (
-    <div className="bg-[#181818] rounded-lg p-4">
-      <p className="text-sm text-gray-400">{title}</p>
-      <h3 className="text-2xl font-bold mt-1">{value}</h3>
-      <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
+    <div className="bg-[#181818] rounded-lg p-5">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+        {title}
+      </p>
+      <h3 className="mt-3 text-3xl font-bold">{value}</h3>
+      <p className="mt-2 text-xs text-gray-500">{subtitle}</p>
     </div>
   );
 }
@@ -718,7 +720,7 @@ function Recommendations() {
   ]);
 
   return (
-    <div className="h-screen bg-black flex flex-col">
+    <div className="app-shell h-screen bg-black flex flex-col">
       <AdminGateModal
         actionLabel={adminGate.actionLabel}
         isOpen={adminGate.isOpen}
@@ -733,13 +735,20 @@ function Recommendations() {
         <Sidebar playlists={playlists} />
 
         <main className="flex-1 bg-[#121212] rounded-lg m-2 overflow-hidden">
-          <div className="p-6 text-white overflow-y-auto h-full">
-            <h1 className="text-3xl font-bold mb-2">Recommendations</h1>
+          <div className="fade-in p-6 text-white overflow-y-auto h-full">
+            <div className="premium-hero mb-6">
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-[#1db954]">
+                Discovery engine
+              </p>
+              <h1 className="page-title text-4xl font-bold md:text-5xl">
+                Recommendations
+              </h1>
 
-            <p className="text-sm text-gray-400 mb-6">
-              Hybrid recommendation engine using vector similarity, artist
-              affinity, popularity, recency, and user feedback.
-            </p>
+              <p className="page-subtitle mt-3 max-w-4xl text-sm leading-relaxed md:text-base">
+                Hybrid recommendation engine using vector similarity, artist
+                affinity, popularity, recency, and user feedback.
+              </p>
+            </div>
 
             <section className="bg-[#181818] rounded-lg p-6 mb-6">
               <h2 className="text-2xl font-bold mb-4">Recommended Artists</h2>
@@ -766,7 +775,7 @@ function Recommendations() {
                 {visibleArtistRecommendationsWithDisplayScores.map((artist, index) => (
                   <div
                     key={artist.artist}
-                    className="flex items-center justify-between border-b border-white/10 pb-3"
+                    className="music-table-row flex items-center justify-between gap-4 border-b border-white/10 p-3"
                   >
                     <div>
                       <p className="font-semibold">
@@ -1065,7 +1074,7 @@ function Recommendations() {
               {visibleSongRecommendationsWithDisplayScores.map((rec) => (
                 <div
                   key={`${rec.trackName}-${rec.artistName}`}
-                  className="bg-[#181818] rounded-lg p-4 hover:bg-[#252525] transition"
+                  className="bg-[#181818] rounded-lg p-5 hover:bg-[#252525] transition"
                 >
                   <div className="flex justify-between gap-4">
                     <div>

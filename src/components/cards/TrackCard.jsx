@@ -10,11 +10,11 @@ function TrackCard({
         <img
           src={image}
           alt={title}
-          className="mb-2 w-full h-[140px] object-cover rounded"
+          className="artwork-frame mb-3 w-full h-[140px] object-cover rounded"
           loading="lazy"
         />
       ) : (
-        <div className="mb-2 w-full h-[140px] rounded bg-[#2a2a2a] flex items-center justify-center text-sm text-gray-300">
+        <div className="artwork-frame mb-3 w-full h-[140px] rounded bg-[#2a2a2a] flex items-center justify-center text-sm text-gray-300">
           No image
         </div>
       )}

@@ -2,12 +2,15 @@
 
 function Header() {
   return (
-    <div className="mb-6">
-      <h1 className="text-3xl font-bold text-white">
+    <div className="premium-hero mb-6 fade-in">
+      <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-[#1db954]">
+        Listening intelligence
+      </p>
+      <h1 className="page-title text-4xl font-bold text-white md:text-5xl">
         Music Intelligence Dashboard
       </h1>
 
-      <p className="text-sm text-gray-400 mt-2 leading-relaxed">
+      <p className="page-subtitle mt-3 max-w-4xl text-sm leading-relaxed md:text-base">
         Spotify listening analytics, recommendation systems, feature
         engineering, vector similarity, and ML evaluation.
       </p>

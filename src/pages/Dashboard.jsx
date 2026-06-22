@@ -100,10 +100,12 @@ function sortRowsForImageLoading(rows) {
 
 function StatCard({ title, value, subtitle }) {
   return (
-    <div className="bg-[#181818] rounded-lg p-4">
-      <p className="text-sm text-gray-400">{title}</p>
-      <h3 className="text-2xl font-bold mt-1">{value}</h3>
-      <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
+    <div className="bg-[#181818] rounded-lg p-5">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+        {title}
+      </p>
+      <h3 className="mt-3 text-3xl font-bold">{value}</h3>
+      <p className="mt-2 text-xs text-gray-500">{subtitle}</p>
     </div>
   );
 }
@@ -117,7 +119,7 @@ function RankingImage({ row, onImageError }) {
       <img
         src={row.imageUrl}
         alt={row.name || row.artistName || row.albumName || "Ranking artwork"}
-        className={`h-11 w-11 object-cover bg-[#2a2a2a] ${shapeClass}`}
+        className={`artwork-frame h-12 w-12 object-cover bg-[#2a2a2a] ${shapeClass}`}
         loading="lazy"
         onError={() => onImageError?.(row.imageKey)}
       />
@@ -126,7 +128,7 @@ function RankingImage({ row, onImageError }) {
 
   return (
     <div
-      className={`h-11 w-11 bg-[#2a2a2a] text-gray-300 flex items-center justify-center text-sm font-bold ${shapeClass}`}
+      className={`artwork-frame h-12 w-12 bg-[#2a2a2a] text-gray-300 flex items-center justify-center text-sm font-bold ${shapeClass}`}
     >
       {getFallbackInitial(row)}
     </div>
@@ -135,14 +137,14 @@ function RankingImage({ row, onImageError }) {
 
 function RankingTable({ title, rows, columns, onImageError }) {
   return (
-    <div className="bg-[#181818] rounded-lg p-4">
-      <h2 className="text-lg font-bold mb-4">{title}</h2>
+    <div className="bg-[#181818] rounded-lg p-5">
+      <h2 className="mb-5 text-lg font-bold">{title}</h2>
 
       <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
         {rows.map((row, index) => (
           <div
             key={`${title}-${index}-${row.name || ""}-${row.artistName || ""}-${row.albumName || ""}`}
-            className="grid grid-cols-[40px_44px_1fr_auto] gap-3 items-center border-b border-white/5 pb-3"
+            className="music-table-row grid grid-cols-[42px_48px_1fr_auto] gap-3 items-center border-b border-white/5 p-2"
           >
             <div>
               <span className="block text-gray-400">#{row.rank || index + 1}</span>
@@ -722,14 +724,14 @@ function Dashboard() {
   };
 
   return (
-    <div className="h-screen bg-black flex flex-col">
+    <div className="app-shell h-screen bg-black flex flex-col">
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar playlists={playlists} />
 
         <main className="flex-1 bg-[#121212] rounded-lg m-2 overflow-hidden">
-          <div className="p-6 text-white overflow-y-auto h-full">
+          <div className="fade-in p-6 text-white overflow-y-auto h-full">
             <Header />
 
             <div className="mb-4 bg-[#181818] rounded-lg p-4 border border-white/10">
@@ -782,7 +784,7 @@ function Dashboard() {
                 : `${historySourceLabel} analytics — ${timeRangeLabel}`}
             </div>
 
-            <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <section className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
               <StatCard
                 title="Streams analyzed"
                 value={dashboardTotalStreams}

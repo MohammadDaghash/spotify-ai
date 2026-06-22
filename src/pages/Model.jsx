@@ -4,7 +4,7 @@ import Sidebar from "../components/Sidebar.jsx";
 
 function ModelCard({ title, children }) {
   return (
-    <div className="bg-[#181818] rounded-lg p-5">
+    <div className="bg-[#181818] rounded-lg p-6">
       <h2 className="text-xl font-bold mb-3">{title}</h2>
       <div className="text-sm text-gray-300 leading-relaxed">{children}</div>
     </div>
@@ -13,21 +13,28 @@ function ModelCard({ title, children }) {
 
 function Model() {
   return (
-    <div className="h-screen bg-black flex flex-col">
+    <div className="app-shell h-screen bg-black flex flex-col">
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
 
         <main className="flex-1 bg-[#121212] rounded-lg m-2 overflow-hidden">
-          <div className="p-6 text-white overflow-y-auto h-full">
-            <h1 className="text-3xl font-bold mb-2">Model & Evaluation</h1>
+          <div className="fade-in p-6 text-white overflow-y-auto h-full">
+            <div className="premium-hero mb-6">
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-[#1db954]">
+                Model lab
+              </p>
+              <h1 className="page-title text-4xl font-bold md:text-5xl">
+                Model & Evaluation
+              </h1>
 
-            <p className="text-sm text-gray-400 mb-6">
-              Mathematical explanation of the recommendation engine: feature
-              vectors, cosine similarity, hybrid scoring, and evaluation
-              metrics.
-            </p>
+              <p className="page-subtitle mt-3 max-w-4xl text-sm leading-relaxed md:text-base">
+                Mathematical explanation of the recommendation engine: feature
+                vectors, cosine similarity, hybrid scoring, and evaluation
+                metrics.
+              </p>
+            </div>
 
             <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <ModelCard title="1. Feature Vector">

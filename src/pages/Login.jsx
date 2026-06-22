@@ -59,12 +59,17 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4 py-10">
-      <div className="bg-[#121212] p-8 rounded-lg w-full max-w-3xl border border-white/10">
+    <div className="app-shell min-h-screen bg-black text-white flex items-center justify-center px-4 py-10">
+      <div className="fade-in bg-[#121212] p-8 rounded-lg w-full max-w-3xl border border-white/10">
         <div className="flex items-start justify-between gap-6">
           <div>
-            <h1 className="text-2xl font-bold mb-2">Use your own data</h1>
-            <p className="text-gray-400 mb-6 max-w-xl">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-[#1db954]">
+              Personal mode
+            </p>
+            <h1 className="page-title text-4xl font-bold mb-3">
+              Use your own data
+            </h1>
+            <p className="page-subtitle mb-6 max-w-xl">
               Sign in with Spotify for live data, or import your downloaded
               Spotify listening-history JSON files for full-history analytics.
             </p>

@@ -49,34 +49,37 @@ export default function ArtistPage() {
     };
   }, [id, getArtist, getArtistAlbums]);
 
-  if (loading) return <div className="text-white p-8">Loading...</div>;
-  if (!artist) return <div className="text-white p-8">Artist not found.</div>;
+  if (loading) return <div className="app-shell min-h-screen text-white p-8">Loading...</div>;
+  if (!artist) return <div className="app-shell min-h-screen text-white p-8">Artist not found.</div>;
 
   const artistImg = artist.images?.[0]?.url;
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white">
+    <div className="app-shell min-h-screen bg-[#121212] text-white">
       {/* HEADER */}
       <div
-        className="h-100 flex items-end p-8"
-        style={{ background: "linear-gradient(180deg, #b91c1c, #000)" }}
+        className="flex min-h-[360px] flex-col items-start justify-end gap-8 p-8 md:flex-row md:items-end"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(30, 215, 96, 0.28), rgba(0, 0, 0, 0.84)), linear-gradient(135deg, #102318, #050506)",
+        }}
       >
         {artistImg ? (
           <img
             src={artistImg}
             alt={artist.name}
-            className="w-52 h-52 rounded-full object-cover shadow-xl"
+            className="artwork-frame w-44 h-44 rounded-full object-cover shadow-xl md:h-52 md:w-52"
             draggable={false}
           />
         ) : (
-          <div className="w-52 h-52 rounded-full bg-zinc-800 shadow-xl flex items-center justify-center text-zinc-300">
+          <div className="artwork-frame w-44 h-44 rounded-full bg-zinc-800 shadow-xl flex items-center justify-center text-zinc-300 md:h-52 md:w-52">
             No image
           </div>
         )}
 
-        <div className="ml-20">
-          <p className="uppercase text-sm text-gray-300">Artist</p>
-          <h1 className="text-6xl font-bold">{artist.name}</h1>
+        <div>
+          <p className="uppercase tracking-[0.22em] text-sm text-[#1db954]">Artist</p>
+          <h1 className="page-title mt-2 text-5xl font-bold md:text-7xl">{artist.name}</h1>
           <p className="text-sm text-gray-300 mt-2">
             {(artist.followers?.total ?? 0).toLocaleString()} followers
           </p>

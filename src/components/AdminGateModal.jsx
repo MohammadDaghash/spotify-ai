@@ -50,9 +50,12 @@ function AdminGateModal({
   const alreadyAdmin = isAdmin();
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-lg bg-[#181818] border border-white/10 p-6 text-white shadow-2xl">
-        <h2 className="text-xl font-bold">{title}</h2>
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xl flex items-center justify-center px-4">
+      <div className="fade-in w-full max-w-md rounded-lg bg-[#181818] border border-white/10 p-6 text-white shadow-2xl">
+        <p className="mb-3 text-xs font-bold uppercase tracking-[0.22em] text-[#1db954]">
+          Admin controls
+        </p>
+        <h2 className="page-title text-2xl font-bold">{title}</h2>
 
         <p className="text-sm text-gray-400 mt-3 leading-relaxed">
           {message}

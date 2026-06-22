@@ -104,14 +104,14 @@ function ArtistPreferenceSurvey({
       </div>
 
       {currentArtist ? (
-        <div className="bg-[#121212] rounded-lg p-5">
+        <div className="bg-[#121212] rounded-lg p-6">
           <p className="text-sm text-gray-400 mb-2">Do they like this artist?</p>
-          <h3 className="text-3xl font-bold">{currentArtist}</h3>
+          <h3 className="page-title text-4xl font-bold">{currentArtist}</h3>
           <p className="text-xs text-gray-500 mt-2">
             Suggested from the selected group context.
           </p>
 
-          <div className="flex gap-3 mt-6">
+          <div className="flex flex-col gap-3 mt-6 sm:flex-row">
             <button
               type="button"
               onClick={() => recordChoice(currentArtist, "like")}
@@ -130,7 +130,7 @@ function ArtistPreferenceSurvey({
           </div>
         </div>
       ) : (
-        <div className="bg-[#121212] rounded-lg p-5">
+        <div className="bg-[#121212] rounded-lg p-6">
           <p className="text-sm text-gray-400">
             No more artists in this survey pool.
           </p>

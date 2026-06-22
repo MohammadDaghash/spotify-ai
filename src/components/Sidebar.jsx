@@ -27,10 +27,13 @@ function Sidebar() {
   ];
 
   return (
-    <aside className="w-[260px] h-full p-2 text-white hidden lg:block">
-      <div className="bg-[#121212] w-full h-full rounded-lg p-4 flex flex-col gap-6">
+    <aside className="premium-sidebar w-[280px] h-full p-2 text-white hidden lg:block">
+      <div className="premium-sidebar-panel bg-[#121212] w-full h-full rounded-lg p-5 flex flex-col gap-7">
         <div>
-          <h2 className="font-bold text-base">Music Intelligence</h2>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#1db954]">
+            Spotify AI
+          </p>
+          <h2 className="mt-2 text-xl font-bold">Music Intelligence</h2>
 
           <p className="text-xs text-gray-400 mt-2 leading-relaxed">
             Real Spotify history transformed into analytics, recommendation
@@ -44,7 +47,7 @@ function Sidebar() {
               key={link.path}
               to={link.path}
               className={({ isActive }) =>
-                `rounded-lg px-4 py-3 text-sm font-medium transition ${
+                `premium-nav-link rounded-lg px-4 py-3 text-sm font-semibold transition ${
                   isActive
                     ? "bg-white text-black"
                     : "bg-[#181818] text-white hover:bg-[#242424]"

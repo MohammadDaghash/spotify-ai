@@ -80,16 +80,15 @@ export default function AlbumCard({ album, artistName }) {
 
   const onClickFlip = async () => {
     await ensureAiSongs();
-    setFlipped((p) => !p);
+    const nextFlipped = !flipped;
+    if (nextFlipped) {
+      setHoverOpen(false);
+    }
+    setFlipped(nextFlipped);
   };
 
-  // Close popup when flipped to reduce clutter
-  useEffect(() => {
-    if (flipped) setHoverOpen(false);
-  }, [flipped]);
-
   return (
-    <div className="relative min-w-[180px] hover:bg-[#1a1a1a] p-3 rounded-lg">
+    <div className="relative min-w-[180px] hover:bg-[#1a1a1a] p-3 rounded-lg transition duration-200 hover:-translate-y-1">
       <div
         className="relative w-full h-44 cursor-pointer"
         style={{ perspective: "1000px" }}
@@ -118,14 +117,14 @@ export default function AlbumCard({ album, artistName }) {
             <img
               src={album?.images?.[0]?.url}
               alt={album?.name}
-              className="w-full h-full object-cover rounded-md"
+              className="artwork-frame w-full h-full object-cover rounded-md"
               draggable={false}
             />
           </div>
 
           {/* BACK */}
           <div
-            className="absolute inset-0 rounded-md flex items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-700 shadow-2xl overflow-hidden p-3"
+            className="absolute inset-0 rounded-md flex items-center justify-center bg-gradient-to-br from-zinc-950 via-zinc-900 to-emerald-950 shadow-2xl overflow-hidden p-3"
             style={{
               backfaceVisibility: "hidden",
               transform: "rotateY(180deg)",

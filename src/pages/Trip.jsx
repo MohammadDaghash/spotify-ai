@@ -514,19 +514,26 @@ function Trip() {
   );
 
   return (
-    <div className="h-screen bg-black flex flex-col">
+    <div className="app-shell h-screen bg-black flex flex-col">
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar playlists={playlists} />
 
         <main className="flex-1 bg-[#121212] rounded-lg m-2 overflow-hidden">
-          <div className="p-6 text-white overflow-y-auto h-full">
-            <h1 className="text-3xl font-bold mb-2">Group Mix</h1>
-            <p className="text-sm text-gray-400 mb-6">
-              Build a group taste profile for any hangout: apartment night,
-              picnic, party, road trip, dinner, or anything in between.
-            </p>
+          <div className="fade-in p-6 text-white overflow-y-auto h-full">
+            <div className="premium-hero mb-6">
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-[#1db954]">
+                Shared listening
+              </p>
+              <h1 className="page-title text-4xl font-bold md:text-5xl">
+                Group Mix
+              </h1>
+              <p className="page-subtitle mt-3 max-w-4xl text-sm leading-relaxed md:text-base">
+                Build a group taste profile for any hangout: apartment night,
+                picnic, party, road trip, dinner, or anything in between.
+              </p>
+            </div>
 
             <section className="bg-[#181818] rounded-lg p-6 mb-6">
               <label className="block text-sm text-gray-400 mb-2">
@@ -615,7 +622,7 @@ function Trip() {
                   send a real consent link.
                 </p>
 
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <input
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
@@ -639,7 +646,7 @@ function Trip() {
                   survey shaped by the hangout context.
                 </p>
 
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <input
                     value={surveyName}
                     onChange={(event) => setSurveyName(event.target.value)}
@@ -693,7 +700,7 @@ function Trip() {
                   {members.map((member) => (
                     <div
                       key={member.id}
-                      className="bg-[#121212] rounded-lg p-4 flex items-center justify-between gap-4"
+                      className="music-table-row bg-[#121212] rounded-lg p-4 flex items-center justify-between gap-4"
                     >
                       <div>
                         <p className="font-semibold">{member.name}</p>

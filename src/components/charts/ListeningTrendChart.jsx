@@ -29,23 +29,24 @@ function formatTooltipDate(label, timeRange) {
 
 function ListeningTrendChart({ data, timeRange }) {
   return (
-    <div className="bg-[#181818] rounded-lg p-5 mb-6">
+    <div className="bg-[#181818] rounded-lg p-6 mb-6">
       <h2 className="text-xl font-bold mb-4">Listening Trend</h2>
 
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <XAxis dataKey="date" />
-            <YAxis />
+            <XAxis dataKey="date" stroke="rgba(255,255,255,0.45)" />
+            <YAxis stroke="rgba(255,255,255,0.45)" />
 
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
 
                 return (
-                  <div className="bg-black text-white border border-white/10 rounded-lg p-3 text-sm">
+                  <div className="bg-black text-white border border-white/10 rounded-lg p-3 text-sm shadow-2xl">
                     <p className="font-semibold">
-                      {payload[0].payload.displayDate}
+                      {payload[0].payload.displayDate ||
+                        formatTooltipDate(label, timeRange)}
                     </p>
                     <p className="text-gray-300">Minutes: {payload[0].value}</p>
                   </div>
@@ -53,7 +54,14 @@ function ListeningTrendChart({ data, timeRange }) {
               }}
             />
 
-            <Line type="monotone" dataKey="minutesPlayed" strokeWidth={3} />
+            <Line
+              type="monotone"
+              dataKey="minutesPlayed"
+              stroke="#1ed760"
+              strokeWidth={3}
+              dot={false}
+              activeDot={{ r: 5, fill: "#ffffff", stroke: "#1ed760" }}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>

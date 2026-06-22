@@ -116,12 +116,14 @@ function TopBar() {
         title="Admin Login"
       />
 
-      <div className="h-14 bg-black flex items-center justify-between px-4 text-white">
+      <div className="premium-topbar min-h-16 bg-black flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 px-4 py-3 text-white">
         <div className="flex items-center gap-4">
-          <FaSpotify size={24} />
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1db954] text-black shadow-lg">
+            <FaSpotify size={24} />
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 w-[40%]">
+        <div className="order-3 flex w-full items-center gap-3 lg:order-none lg:w-[42%]">
           <button
             className="bg-[#1f1f1f] p-2 rounded-full hover:bg-[#2a2a2a]"
             onClick={() => navigate("/")}
@@ -130,7 +132,7 @@ function TopBar() {
             <FaHome size={20} />
           </button>
 
-          <div className="relative flex items-center gap-2 bg-[#1f1f1f] px-4 py-2 rounded-full w-full hover:bg-[#2a2a2a]">
+          <div className="relative flex w-full items-center gap-2 rounded-full bg-[#1f1f1f] px-4 py-2 hover:bg-[#2a2a2a]">
             <button onClick={handleSearch} type="button" aria-label="Search">
               <IoSearch size={18} className="text-gray-400 hover:text-white" />
             </button>
@@ -182,7 +184,7 @@ function TopBar() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-sm text-gray-400">
+        <div className="flex flex-wrap items-center justify-end gap-2 text-sm text-gray-400">
           {badgeText ? (
             <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-[#1f1f1f] px-2 text-white">
               {badgeText}
@@ -226,7 +228,7 @@ function TopBar() {
             {isAdminMode ? "Admin Logout" : "Admin Login"}
           </button>
 
-          <span>Music Intelligence</span>
+          <span className="hidden xl:inline">Music Intelligence</span>
         </div>
       </div>
     </>
