@@ -18,6 +18,7 @@
     "test:spotify-sync": "node scripts/testSpotifyPublicSync.mjs",
     "test:spotify-user-data": "node scripts/testSpotifyUserDataFlow.mjs",
     "test:spotify-refresh-token-setup": "node scripts/testSpotifyRefreshTokenSetup.mjs",
+    "test:topbar-search": "node scripts/testTopbarSearch.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -1,5 +1,6 @@
 // src/pages/Recommendations.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
@@ -22,6 +23,7 @@ import {
   getVisibleArtistRecommendations,
   getVisibleSongRecommendations,
 } from "../utils/recommendationLists.js";
+import { normalizeTopbarSearchText } from "../utils/topbarSearch.js";
 
 const ARTIST_RECOMMENDATION_RANKING_KEY =
   "spotify_ai_previous_artist_recommendation_ranking";
@@ -166,6 +168,63 @@ function getTopWeights(weights, limit = 3) {
     }));
 }
 
+function recommendationMatchesSearch(item, query) {
+  const normalizedQuery = normalizeTopbarSearchText(query);
+
+  if (!normalizedQuery) return true;
+
+  const itemText = normalizeTopbarSearchText(
+    [
+      item.artist,
+      item.artist_name,
+      item.artistName,
+      item.track_name,
+      item.trackName,
+      item.name,
+      item.reason,
+      item.description,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+
+  return normalizedQuery
+    .split(" ")
+    .filter(Boolean)
+    .every((token) => itemText.includes(token));
+}
+
+function filterTripPlaylistsForSearch(playlists, query) {
+  if (!playlists || !query) return playlists;
+
+  return Object.fromEntries(
+    Object.entries(playlists)
+      .map(([playlistKey, playlist]) => {
+        const playlistMatches = recommendationMatchesSearch(
+          {
+            name: playlist.name,
+            description: playlist.description,
+          },
+          query,
+        );
+        const tracks = playlistMatches
+          ? playlist.tracks
+          : playlist.tracks.filter((track) =>
+              recommendationMatchesSearch(track, query),
+            );
+
+        return [
+          playlistKey,
+          {
+            ...playlist,
+            tracks,
+          },
+        ];
+      })
+      .filter(([, playlist]) => playlist.tracks.length > 0),
+  );
+}
+
 function addRelativeMatchScores(recommendations) {
   if (recommendations.length === 0) return [];
 
@@ -230,6 +289,8 @@ function calculateDiscoveryMetrics({
 }
 
 function Recommendations() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     playlists = [],
     getFollowedArtists,
@@ -275,6 +336,19 @@ function Recommendations() {
     actionLabel: "",
     action: null,
   });
+  const recommendationSearchParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
+  const recommendationSearchQuery =
+    recommendationSearchParams.get("search")?.trim() || "";
+  const recommendationSearchType = recommendationSearchParams.get("type") || "";
+  const activeRecommendationSearchType = ["song", "artist"].includes(
+    recommendationSearchType,
+  )
+    ? recommendationSearchType
+    : "";
+  const isRecommendationSearchActive = Boolean(recommendationSearchQuery);
 
   const runAdminAction = (actionLabel, action) => {
     if (isAdmin()) {
@@ -575,6 +649,28 @@ function Recommendations() {
     );
   }, [visibleArtistRecommendations]);
 
+  const displayedArtistRecommendationsWithDisplayScores = useMemo(() => {
+    if (!isRecommendationSearchActive) {
+      return visibleArtistRecommendationsWithDisplayScores;
+    }
+
+    if (
+      activeRecommendationSearchType &&
+      activeRecommendationSearchType !== "artist"
+    ) {
+      return [];
+    }
+
+    return visibleArtistRecommendationsWithDisplayScores.filter((artist) =>
+      recommendationMatchesSearch(artist, recommendationSearchQuery),
+    );
+  }, [
+    activeRecommendationSearchType,
+    isRecommendationSearchActive,
+    recommendationSearchQuery,
+    visibleArtistRecommendationsWithDisplayScores,
+  ]);
+
   useEffect(() => {
     storeRankingRows(
       ARTIST_RECOMMENDATION_RANKING_KEY,
@@ -666,6 +762,28 @@ function Recommendations() {
     );
   }, [visibleSongRecommendations]);
 
+  const displayedSongRecommendationsWithDisplayScores = useMemo(() => {
+    if (!isRecommendationSearchActive) {
+      return visibleSongRecommendationsWithDisplayScores;
+    }
+
+    if (
+      activeRecommendationSearchType &&
+      activeRecommendationSearchType !== "song"
+    ) {
+      return [];
+    }
+
+    return visibleSongRecommendationsWithDisplayScores.filter((track) =>
+      recommendationMatchesSearch(track, recommendationSearchQuery),
+    );
+  }, [
+    activeRecommendationSearchType,
+    isRecommendationSearchActive,
+    recommendationSearchQuery,
+    visibleSongRecommendationsWithDisplayScores,
+  ]);
+
   useEffect(() => {
     storeRankingRows(
       SONG_RECOMMENDATION_RANKING_KEY,
@@ -719,6 +837,26 @@ function Recommendations() {
     effectiveUserTasteProfile,
   ]);
 
+  const displayedTripPlaylists = useMemo(
+    () =>
+      isRecommendationSearchActive
+        ? filterTripPlaylistsForSearch(tripPlaylists, recommendationSearchQuery)
+        : tripPlaylists,
+    [isRecommendationSearchActive, recommendationSearchQuery, tripPlaylists],
+  );
+
+  const hasDisplayedTripPlaylistTracks = Object.values(
+    displayedTripPlaylists || {},
+  ).some((playlist) => playlist.tracks.length > 0);
+  const hasRecommendationSearchResults =
+    displayedArtistRecommendationsWithDisplayScores.length > 0 ||
+    displayedSongRecommendationsWithDisplayScores.length > 0 ||
+    hasDisplayedTripPlaylistTracks;
+
+  const clearRecommendationSearch = () => {
+    navigate("/recommendations");
+  };
+
   return (
     <div className="app-shell h-screen bg-black flex flex-col">
       <AdminGateModal
@@ -750,6 +888,35 @@ function Recommendations() {
               </p>
             </div>
 
+            {isRecommendationSearchActive && (
+              <div className="mb-6 flex flex-col gap-3 rounded-lg border border-sky-400/20 bg-sky-400/10 p-4 md:flex-row md:items-center md:justify-between">
+                <p className="text-sm text-sky-100">
+                  Showing recommendation results for{" "}
+                  <span className="font-semibold">
+                    “{recommendationSearchQuery}”
+                  </span>
+                  {activeRecommendationSearchType
+                    ? ` in ${activeRecommendationSearchType}s`
+                    : ""}
+                  .
+                </p>
+
+                <button
+                  className="self-start rounded-full bg-white px-4 py-2 text-xs font-bold text-black transition hover:scale-[1.02] md:self-auto"
+                  onClick={clearRecommendationSearch}
+                  type="button"
+                >
+                  Clear search
+                </button>
+              </div>
+            )}
+
+            {isRecommendationSearchActive && !hasRecommendationSearchResults && (
+              <div className="mb-6 rounded-lg border border-white/10 bg-[#181818] p-6 text-sm text-gray-400">
+                No results found
+              </div>
+            )}
+
             <section className="bg-[#181818] rounded-lg p-6 mb-6">
               <h2 className="text-2xl font-bold mb-4">Recommended Artists</h2>
 
@@ -765,14 +932,16 @@ function Recommendations() {
 
               {!mlLoading &&
                 !mlError &&
-                visibleArtistRecommendations.length === 0 && (
+                displayedArtistRecommendationsWithDisplayScores.length === 0 && (
                   <p className="text-sm text-gray-400">
-                    No new artist recommendations found.
+                    {isRecommendationSearchActive
+                      ? "No results found"
+                      : "No new artist recommendations found."}
                   </p>
                 )}
 
               <div className="space-y-3">
-                {visibleArtistRecommendationsWithDisplayScores.map((artist, index) => (
+                {displayedArtistRecommendationsWithDisplayScores.map((artist, index) => (
                   <div
                     key={artist.artist}
                     className="music-table-row flex items-center justify-between gap-4 border-b border-white/10 p-3"
@@ -996,7 +1165,7 @@ function Recommendations() {
               </div>
             </section>
 
-            {tripPlaylists && (
+            {displayedTripPlaylists && hasDisplayedTripPlaylistTracks && (
               <section className="bg-[#181818] rounded-lg p-6 mb-6">
                 <div className="flex items-center justify-between gap-4 mb-4">
                   <div>
@@ -1008,7 +1177,7 @@ function Recommendations() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {Object.entries(tripPlaylists).map(([playlistKey, playlist]) => (
+                  {Object.entries(displayedTripPlaylists).map(([playlistKey, playlist]) => (
                     <div
                       key={playlistKey}
                       className="bg-[#121212] rounded-lg p-4 border border-white/10"
@@ -1070,8 +1239,16 @@ function Recommendations() {
 
             <h2 className="text-xl font-bold mb-4">Recommended songs</h2>
 
+            {displayedSongRecommendationsWithDisplayScores.length === 0 && (
+              <p className="mb-4 text-sm text-gray-400">
+                {isRecommendationSearchActive
+                  ? "No results found"
+                  : "No new song recommendations found."}
+              </p>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {visibleSongRecommendationsWithDisplayScores.map((rec) => (
+              {displayedSongRecommendationsWithDisplayScores.map((rec) => (
                 <div
                   key={`${rec.trackName}-${rec.artistName}`}
                   className="bg-[#181818] rounded-lg p-5 hover:bg-[#252525] transition"

@@ -5,6 +5,7 @@ import Header from "../components/layout/Header.jsx";
 import RankMovementBadge from "../components/RankMovementBadge.jsx";
 import AdminGateModal from "../components/AdminGateModal.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useSpotifyContext } from "../context/SpotifyContext.jsx";
 import { allSpotifyHistory } from "../data/loadSpotifyHistory.js";
 import { parseSpotifyHistory } from "../utils/spotifyDataParser.js";
@@ -28,6 +29,7 @@ import {
   syncPublicListeningNow,
 } from "../services/publicListeningApi.js";
 import { loginAdminServerSession } from "../services/adminApi.js";
+import { normalizeTopbarSearchText } from "../utils/topbarSearch.js";
 
 const RANKING_IMAGE_CACHE_KEY = "spotify_ai_dashboard_ranking_images_v4";
 const MAX_CACHED_RANKING_IMAGES = 500;
@@ -136,6 +138,28 @@ function formatEnvList(values = []) {
   return values.length > 0 ? values.join(", ") : "";
 }
 
+function rowMatchesDashboardSearch(row, query) {
+  const normalizedQuery = normalizeTopbarSearchText(query);
+
+  if (!normalizedQuery) return true;
+
+  const rowText = normalizeTopbarSearchText(
+    [
+      row.name,
+      row.trackName,
+      row.artistName,
+      row.albumName,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+
+  return normalizedQuery
+    .split(" ")
+    .filter(Boolean)
+    .every((token) => rowText.includes(token));
+}
+
 function RankingImage({ row, onImageError }) {
   const isArtist = row.imageType === "artist";
   const shapeClass = isArtist ? "rounded-full" : "rounded";
@@ -167,48 +191,56 @@ function RankingTable({ title, rows, columns, onImageError }) {
       <h2 className="mb-5 text-lg font-bold">{title}</h2>
 
       <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
-        {rows.map((row, index) => (
-          <div
-            key={`${title}-${index}-${row.name || ""}-${row.artistName || ""}-${row.albumName || ""}`}
-            className="music-table-row grid grid-cols-[42px_48px_1fr_auto] gap-3 items-center border-b border-white/5 p-2"
-          >
-            <div>
-              <span className="block text-gray-400">#{row.rank || index + 1}</span>
-              <RankMovementBadge row={row} />
+        {rows.length > 0 ? (
+          rows.map((row, index) => (
+            <div
+              key={`${title}-${index}-${row.name || ""}-${row.artistName || ""}-${row.albumName || ""}`}
+              className="music-table-row grid grid-cols-[42px_48px_1fr_auto] gap-3 items-center border-b border-white/5 p-2"
+            >
+              <div>
+                <span className="block text-gray-400">#{row.rank || index + 1}</span>
+                <RankMovementBadge row={row} />
+              </div>
+
+              <RankingImage row={row} onImageError={onImageError} />
+
+              <div>
+                <p className="font-semibold">
+                  {row.name || row.trackName || row.albumName || row.artistName}
+                </p>
+
+                <p className="text-xs text-gray-400">
+                  {columns
+                    .map((col) => row[col])
+                    .filter(Boolean)
+                    .join(" • ")}
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="font-bold text-white">
+                  {row.streams?.toLocaleString()} streams
+                </p>
+
+                <p className="text-xs text-gray-400">
+                  {Math.round(row.minutes || 0).toLocaleString()} min
+                </p>
+              </div>
             </div>
-
-            <RankingImage row={row} onImageError={onImageError} />
-
-            <div>
-              <p className="font-semibold">
-                {row.name || row.trackName || row.albumName || row.artistName}
-              </p>
-
-              <p className="text-xs text-gray-400">
-                {columns
-                  .map((col) => row[col])
-                  .filter(Boolean)
-                  .join(" • ")}
-              </p>
-            </div>
-
-            <div className="text-right">
-              <p className="font-bold text-white">
-                {row.streams?.toLocaleString()} streams
-              </p>
-
-              <p className="text-xs text-gray-400">
-                {Math.round(row.minutes || 0).toLocaleString()} min
-              </p>
-            </div>
+          ))
+        ) : (
+          <div className="rounded-lg border border-white/10 bg-black/20 p-6 text-sm text-gray-400">
+            No results found
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
 }
 
 function Dashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     playlists = [],
     loading = false,
@@ -254,6 +286,19 @@ function Dashboard() {
   const syncedPlayCount = listeningSyncStatus?.total_plays || 0;
   const liveSyncVersion = listeningSyncStatus?.last_checked_at || "";
   const canLoadSpotifyArtwork = hasSpotifyAccessToken();
+  const dashboardSearchParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
+  const dashboardSearchQuery =
+    dashboardSearchParams.get("search")?.trim() || "";
+  const dashboardSearchType = dashboardSearchParams.get("type") || "";
+  const activeDashboardSearchType = ["song", "artist", "album"].includes(
+    dashboardSearchType,
+  )
+    ? dashboardSearchType
+    : "";
+  const isDashboardSearchActive = Boolean(dashboardSearchQuery);
   const publicSpotifyHistory = useMemo(
     () => dedupeHistoryEntries([...allSpotifyHistory, ...publicSyncedHistory]),
     [publicSyncedHistory],
@@ -605,14 +650,66 @@ function Dashboard() {
     [dashboardData],
   );
 
+  const visibleDashboardTopTracks = useMemo(() => {
+    if (!isDashboardSearchActive) return dashboardTopTracks;
+    if (activeDashboardSearchType && activeDashboardSearchType !== "song") {
+      return [];
+    }
+
+    return dashboardTopTracks.filter((track) =>
+      rowMatchesDashboardSearch(track, dashboardSearchQuery),
+    );
+  }, [
+    activeDashboardSearchType,
+    dashboardSearchQuery,
+    dashboardTopTracks,
+    isDashboardSearchActive,
+  ]);
+
+  const visibleDashboardTopArtists = useMemo(() => {
+    if (!isDashboardSearchActive) return dashboardTopArtists;
+    if (activeDashboardSearchType && activeDashboardSearchType !== "artist") {
+      return [];
+    }
+
+    return dashboardTopArtists.filter((artist) =>
+      rowMatchesDashboardSearch(artist, dashboardSearchQuery),
+    );
+  }, [
+    activeDashboardSearchType,
+    dashboardSearchQuery,
+    dashboardTopArtists,
+    isDashboardSearchActive,
+  ]);
+
+  const visibleDashboardTopAlbums = useMemo(() => {
+    if (!isDashboardSearchActive) return dashboardTopAlbums;
+    if (activeDashboardSearchType && activeDashboardSearchType !== "album") {
+      return [];
+    }
+
+    return dashboardTopAlbums.filter((album) =>
+      rowMatchesDashboardSearch(album, dashboardSearchQuery),
+    );
+  }, [
+    activeDashboardSearchType,
+    dashboardSearchQuery,
+    dashboardTopAlbums,
+    isDashboardSearchActive,
+  ]);
+
   const rankingImageRows = useMemo(
     () =>
       sortRowsForImageLoading([
-        ...dashboardTopTracks,
-        ...dashboardTopArtists,
-        ...dashboardTopAlbums,
+        ...visibleDashboardTopTracks,
+        ...visibleDashboardTopArtists,
+        ...visibleDashboardTopAlbums,
       ]),
-    [dashboardTopTracks, dashboardTopArtists, dashboardTopAlbums],
+    [
+      visibleDashboardTopTracks,
+      visibleDashboardTopArtists,
+      visibleDashboardTopAlbums,
+    ],
   );
 
   const rankingImageRequestKey = useMemo(() => {
@@ -836,30 +933,34 @@ function Dashboard() {
 
   const dashboardTopTracksWithImages = useMemo(
     () =>
-      dashboardTopTracks.map((track) => ({
+      visibleDashboardTopTracks.map((track) => ({
         ...track,
         imageUrl: rankingImages[track.imageKey],
       })),
-    [dashboardTopTracks, rankingImages],
+    [visibleDashboardTopTracks, rankingImages],
   );
 
   const dashboardTopArtistsWithImages = useMemo(
     () =>
-      dashboardTopArtists.map((artist) => ({
+      visibleDashboardTopArtists.map((artist) => ({
         ...artist,
         imageUrl: rankingImages[artist.imageKey],
       })),
-    [dashboardTopArtists, rankingImages],
+    [visibleDashboardTopArtists, rankingImages],
   );
 
   const dashboardTopAlbumsWithImages = useMemo(
     () =>
-      dashboardTopAlbums.map((album) => ({
+      visibleDashboardTopAlbums.map((album) => ({
         ...album,
         imageUrl: rankingImages[album.imageKey],
       })),
-    [dashboardTopAlbums, rankingImages],
+    [visibleDashboardTopAlbums, rankingImages],
   );
+
+  const clearDashboardSearch = () => {
+    navigate("/dashboard");
+  };
 
   const removeBrokenRankingImage = (imageKey) => {
     if (!imageKey) return;
@@ -987,6 +1088,27 @@ function Dashboard() {
                 ? "Loading Spotify data…"
                 : `${historySourceLabel} analytics — ${timeRangeLabel}`}
             </div>
+
+            {isDashboardSearchActive && (
+              <div className="mb-4 flex flex-col gap-3 rounded-lg border border-sky-400/20 bg-sky-400/10 p-4 md:flex-row md:items-center md:justify-between">
+                <p className="text-sm text-sky-100">
+                  Showing dashboard results for{" "}
+                  <span className="font-semibold">“{dashboardSearchQuery}”</span>
+                  {activeDashboardSearchType
+                    ? ` in ${activeDashboardSearchType}s`
+                    : ""}
+                  .
+                </p>
+
+                <button
+                  className="self-start rounded-full bg-white px-4 py-2 text-xs font-bold text-black transition hover:scale-[1.02] md:self-auto"
+                  onClick={clearDashboardSearch}
+                  type="button"
+                >
+                  Clear search
+                </button>
+              </div>
+            )}
 
             <section className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
               <StatCard
