@@ -141,6 +141,18 @@ export function decryptRefreshToken(
   }
 }
 
+function getSpotifyTokenRefreshErrorMessage(spotifyError, hasClientSecret) {
+  if (spotifyError === "invalid_client" && !hasClientSecret) {
+    return "Spotify rejected token refresh. SPOTIFY_CLIENT_SECRET may be required in Vercel for this refresh token.";
+  }
+
+  if (spotifyError === "invalid_grant") {
+    return "Spotify rejected the refresh token. Generate a new SPOTIFY_REFRESH_TOKEN and update Vercel.";
+  }
+
+  return "Spotify token refresh failed.";
+}
+
 function signaturesMatch(left, right) {
   const leftBuffer = Buffer.from(left || "");
   const rightBuffer = Buffer.from(right || "");
@@ -595,8 +607,19 @@ async function fetchSpotifyAccessToken(refreshToken) {
   });
 
   if (!response.ok) {
-    const error = new Error("Spotify token refresh failed.");
-    error.code = "token_refresh_failed";
+    const data = await response.json().catch(() => ({}));
+    const spotifyError = safeString(data.error);
+    const error = new Error(
+      getSpotifyTokenRefreshErrorMessage(spotifyError, Boolean(clientSecret)),
+    );
+
+    error.code =
+      spotifyError === "invalid_client" && !clientSecret
+        ? "spotify_client_secret_required"
+        : spotifyError === "invalid_grant"
+          ? "spotify_refresh_token_invalid"
+          : "token_refresh_failed";
+    error.spotify_error = spotifyError || undefined;
     error.status = response.status;
     throw error;
   }
