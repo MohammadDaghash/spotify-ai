@@ -729,7 +729,7 @@ function Dashboard() {
 
   const coverImageStatusText = useMemo(() => {
     if (!canLoadSpotifyArtwork) {
-      return "Sign in with Spotify to load official album covers and artist images.";
+      return "Sign in with Spotify to load official album covers and artist images. Placeholder initials are shown until you connect Spotify.";
     }
 
     const statusParts = [
@@ -1268,19 +1268,25 @@ function Dashboard() {
                 {coverImageStatusText}
               </p>
 
-              <button
-                onClick={retryRankingImages}
-                disabled={!canLoadSpotifyArtwork}
-                className="bg-[#2a2a2a] hover:bg-[#333] disabled:cursor-not-allowed disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-full"
-                title={
-                  canLoadSpotifyArtwork
-                    ? "Retry loading Spotify album covers and artist images"
-                    : "Sign in with Spotify before retrying image loading"
-                }
-                type="button"
-              >
-                Retry covers
-              </button>
+              {canLoadSpotifyArtwork ? (
+                <button
+                  onClick={retryRankingImages}
+                  className="bg-[#2a2a2a] hover:bg-[#333] text-white text-sm font-semibold px-4 py-2 rounded-full"
+                  title="Retry loading Spotify album covers and artist images"
+                  type="button"
+                >
+                  Retry covers
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate("/login")}
+                  className="bg-[#1db954] hover:bg-[#1ed760] text-black text-sm font-bold px-4 py-2 rounded-full transition hover:scale-[1.02]"
+                  title="Open the Spotify sign-in and data import flow"
+                  type="button"
+                >
+                  Sign in to load covers
+                </button>
+              )}
             </div>
 
             <section className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">

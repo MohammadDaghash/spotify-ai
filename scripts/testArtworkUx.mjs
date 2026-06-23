@@ -5,8 +5,8 @@ const dashboardSource = readFileSync("src/pages/Dashboard.jsx", "utf8");
 
 assert.match(
   dashboardSource,
-  /Sign in with Spotify to load official album covers and artist images\./,
-  "Signed-out image status should explain album covers and artist images clearly.",
+  /Sign in with Spotify to load official album covers and artist images\. Placeholder initials are shown until you connect Spotify\./,
+  "Signed-out image status should explain covers/images and placeholder initials clearly.",
 );
 
 assert.match(
@@ -18,13 +18,25 @@ assert.match(
 assert.match(
   dashboardSource,
   /Retry covers/,
-  "Retry button should use user-facing cover/image language.",
+  "Signed-in retry button should use user-facing cover/image language.",
 );
 
 assert.match(
   dashboardSource,
+  /Sign in to load covers/,
+  "Signed-out state should show an actionable sign-in button instead of disabled retry.",
+);
+
+assert.match(
+  dashboardSource,
+  /onClick=\{\(\) => navigate\("\/login"\)\}/,
+  "Sign-in cover button should navigate to the existing Use Your Data flow.",
+);
+
+assert.doesNotMatch(
+  dashboardSource,
   /disabled=\{!canLoadSpotifyArtwork\}/,
-  "Retry should be disabled when Spotify login is unavailable.",
+  "Retry covers should not be rendered as a disabled Spotify-login placeholder.",
 );
 
 assert.doesNotMatch(
