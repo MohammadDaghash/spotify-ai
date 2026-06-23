@@ -13,8 +13,7 @@ function isAuthorizedSyncRequest(req) {
   const authorization = getHeader(req, "authorization");
 
   if (req.method === "GET") {
-    if (!cronSecret) return true;
-    return authorization === `Bearer ${cronSecret}`;
+    return Boolean(cronSecret) && authorization === `Bearer ${cronSecret}`;
   }
 
   if (req.method === "POST") {
@@ -33,17 +32,36 @@ export default async function handler(req, res) {
   }
 
   if (!isAuthorizedSyncRequest(req)) {
+    console.warn("Spotify listening sync unauthorized", {
+      method: req.method,
+    });
+
     return res.status(401).json({
       error: "Admin or Vercel Cron authorization is required to run sync.",
     });
   }
 
   const result = await runSpotifyListeningSync();
+  const trigger = req.method === "GET" ? "cron" : "manual";
   const status = result.ok
     ? 200
     : ["not_configured", "missing_env"].includes(result.code)
       ? 503
       : 502;
+
+  console.info("Spotify listening sync finished", {
+    trigger,
+    ok: result.ok,
+    code: result.code,
+    received: result.received,
+    valid: result.valid,
+    inserted: result.inserted,
+    storage_mode: result.storage_mode,
+    last_sync_status: result.sync?.last_sync_status,
+    last_synced_at: result.sync?.last_synced_at,
+    total_plays: result.sync?.total_plays,
+    latest_played_at: result.sync?.latest_played_at,
+  });
 
   res.setHeader("Cache-Control", "no-store");
   return res.status(status).json(result);

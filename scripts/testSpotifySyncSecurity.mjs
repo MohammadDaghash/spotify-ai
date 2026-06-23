@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   createAdminSessionCookie,
@@ -10,6 +11,16 @@ import {
 } from "../api/lib/publicListeningSync.js";
 import adminLoginHandler from "../api/admin/login.js";
 import syncHandler from "../api/listening/sync.js";
+
+const vercelConfig = JSON.parse(
+  readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),
+);
+const listeningCron = vercelConfig.crons?.find(
+  (cron) => cron.path === "/api/listening/sync",
+);
+
+assert.ok(listeningCron);
+assert.equal(listeningCron.schedule, "0 3 * * *");
 
 function createMockResponse() {
   return {
@@ -123,7 +134,59 @@ assert.equal(
   false,
 );
 
-process.env.CRON_SECRET = process.env.CRON_SECRET || "test-secret";
+const previousProcessEnv = {
+  BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
+  CRON_SECRET: process.env.CRON_SECRET,
+  SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID,
+  SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET,
+  SPOTIFY_REFRESH_TOKEN: process.env.SPOTIFY_REFRESH_TOKEN,
+};
+
+delete process.env.BLOB_READ_WRITE_TOKEN;
+delete process.env.CRON_SECRET;
+delete process.env.SPOTIFY_CLIENT_ID;
+delete process.env.SPOTIFY_CLIENT_SECRET;
+delete process.env.SPOTIFY_REFRESH_TOKEN;
+
+const unauthenticatedCronResponse = createMockResponse();
+await syncHandler(
+  {
+    method: "GET",
+    headers: {},
+  },
+  unauthenticatedCronResponse,
+);
+
+assert.equal(unauthenticatedCronResponse.statusCode, 401);
+
+process.env.CRON_SECRET = "test-secret";
+
+const invalidCronResponse = createMockResponse();
+await syncHandler(
+  {
+    method: "GET",
+    headers: {
+      authorization: "Bearer wrong-secret",
+    },
+  },
+  invalidCronResponse,
+);
+
+assert.equal(invalidCronResponse.statusCode, 401);
+
+const authenticatedCronResponse = createMockResponse();
+await syncHandler(
+  {
+    method: "GET",
+    headers: {
+      authorization: "Bearer test-secret",
+    },
+  },
+  authenticatedCronResponse,
+);
+
+assert.equal(authenticatedCronResponse.statusCode, 503);
+assert.equal(authenticatedCronResponse.body.code, "missing_env");
 
 const unauthenticatedSyncResponse = createMockResponse();
 await syncHandler(
@@ -164,5 +227,13 @@ await syncHandler(
 
 assert.equal(authenticatedSyncResponse.statusCode, 503);
 assert.equal(authenticatedSyncResponse.body.code, "missing_env");
+
+for (const [key, value] of Object.entries(previousProcessEnv)) {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
+}
 
 console.log("Spotify sync security/config tests passed");

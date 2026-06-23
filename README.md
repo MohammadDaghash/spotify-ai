@@ -207,7 +207,7 @@ ADMIN_SESSION_SECRET=generate_a_different_random_secret_at_least_32_chars
 
 Attach a Vercel Blob store to persist synced plays across deployments. The sync JSON contains only safe public play metadata, not OAuth tokens.
 
-The production cron is configured in `vercel.json`:
+The production Vercel Cron is configured in `vercel.json`:
 
 ```json
 {
@@ -215,6 +215,19 @@ The production cron is configured in `vercel.json`:
   "schedule": "0 3 * * *"
 }
 ```
+
+Vercel Cron calls that route as `GET /api/listening/sync` and must send `Authorization: Bearer <CRON_SECRET>`. The endpoint rejects scheduled sync requests if `CRON_SECRET` is missing or does not match.
+
+The current Vercel Hobby account only allows daily cron jobs. If this project is upgraded to a Vercel plan that supports hourly cron, change the schedule to:
+
+```json
+{
+  "path": "/api/listening/sync",
+  "schedule": "0 * * * *"
+}
+```
+
+An external scheduler can also call `GET /api/listening/sync` every 30-60 minutes with the same `Authorization: Bearer <CRON_SECRET>` header.
 
 The Spotify Web API recently-played endpoint only returns the latest recent plays, not full lifetime history. This project keeps imported/exported history as the historical base and merges newly synced recent API plays into the public dashboard. Sync is idempotent and deduplicates by `track_id + played_at`.
 
