@@ -142,6 +142,44 @@ http://127.0.0.1:5173/callback
 http://127.0.0.1:5174/callback
 ```
 
+### Generate `SPOTIFY_REFRESH_TOKEN`
+
+The production sync job needs a server-side Spotify refresh token. Generate it locally only; do not commit it and do not put it in frontend `VITE_` variables.
+
+1. In Spotify Developer Dashboard, add this exact redirect URI to the same Spotify app:
+
+```text
+http://127.0.0.1:8888/callback
+```
+
+2. Make sure `.env` has `VITE_SPOTIFY_CLIENT_ID` or `SPOTIFY_CLIENT_ID`.
+
+3. Optional: add `SPOTIFY_CLIENT_SECRET` to `.env` if you want the helper to use classic Authorization Code Flow. If no secret is present, the helper uses Authorization Code Flow with PKCE.
+
+4. Run:
+
+```bash
+npm run setup:spotify-refresh-token
+```
+
+5. Log in with Spotify. The terminal prints the refresh token once.
+
+6. Add it to Vercel:
+
+```bash
+npx vercel env add SPOTIFY_REFRESH_TOKEN production
+npx vercel --prod --yes
+```
+
+If the helper used `SPOTIFY_CLIENT_SECRET`, also add the same secret to Vercel:
+
+```bash
+npx vercel env add SPOTIFY_CLIENT_SECRET production
+npx vercel --prod --yes
+```
+
+If the helper used PKCE because no `SPOTIFY_CLIENT_SECRET` was found, `SPOTIFY_CLIENT_SECRET` is not required in Vercel.
+
 ### Public Listening Sync on Vercel
 
 The deployed portfolio demo can show public dashboard/recommendation data without visitor login. Public data can include tracks, artists, albums, streams, minutes, ranking movement, recommendation results, and safe play timestamps.

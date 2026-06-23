@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:demo-history": "node scripts/buildDemoSpotifyHistory.mjs",
+    "setup:spotify-refresh-token": "node scripts/spotifyRefreshTokenSetup.mjs",
     "lint": "eslint .",
     "test:admin-auth": "node scripts/testAdminAuth.mjs",
     "test:demo-data": "node scripts/testDemoDataSafety.mjs",
@@ -15,6 +16,7 @@
     "test:recommendation-replacement": "node scripts/testRecommendationReplacement.mjs",
     "test:spotify-sync-security": "node scripts/testSpotifySyncSecurity.mjs",
     "test:spotify-sync": "node scripts/testSpotifyPublicSync.mjs",
+    "test:spotify-refresh-token-setup": "node scripts/testSpotifyRefreshTokenSetup.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
