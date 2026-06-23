@@ -1,7 +1,8 @@
 // src/components/TopBar.jsx
 import { FaSpotify, FaHome } from "react-icons/fa";
 import { IoSearch } from "react-icons/io5";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AdminGateModal from "./AdminGateModal.jsx";
 import { useSpotifyContext } from "../context/SpotifyContext.jsx";
@@ -41,6 +42,9 @@ function TopBar() {
     readLocalSpotifyHistory(),
   );
   const [publicSyncedHistory, setPublicSyncedHistory] = useState([]);
+  const [searchPanelStyle, setSearchPanelStyle] = useState(null);
+  const searchShellRef = useRef(null);
+  const searchPanelRef = useRef(null);
 
   const ctx = useSpotifyContext();
   const badgeText = (ctx?.isName || ctx?.initials || "").trim();
@@ -67,6 +71,33 @@ function TopBar() {
     [searchResults],
   );
 
+  const closeSearch = useCallback(() => {
+    setSearchResults([]);
+    setShowDropdown(false);
+    setHasSearched(false);
+  }, []);
+
+  const updateSearchPanelPosition = useCallback(() => {
+    const searchShell = searchShellRef.current;
+
+    if (!searchShell || typeof window === "undefined") return;
+
+    const rect = searchShell.getBoundingClientRect();
+    const isMobile = window.innerWidth < 768;
+    const sidePadding = isMobile ? 12 : 0;
+    const top = Math.round(rect.bottom + 8);
+    const availableHeight = Math.max(220, window.innerHeight - top - 16);
+
+    setSearchPanelStyle({
+      left: Math.round(isMobile ? sidePadding : rect.left),
+      maxHeight: Math.min(isMobile ? 560 : 620, availableHeight),
+      top,
+      width: Math.round(
+        isMobile ? window.innerWidth - sidePadding * 2 : rect.width,
+      ),
+    });
+  }, []);
+
   useEffect(() => {
     const syncAdminUser = () => {
       setAdminUser(getAdminUser());
@@ -82,6 +113,43 @@ function TopBar() {
       window.removeEventListener("focus", syncAdminUser);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showDropdown) return undefined;
+
+    updateSearchPanelPosition();
+
+    window.addEventListener("resize", updateSearchPanelPosition);
+    window.addEventListener("scroll", updateSearchPanelPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateSearchPanelPosition);
+      window.removeEventListener("scroll", updateSearchPanelPosition, true);
+    };
+  }, [showDropdown, updateSearchPanelPosition]);
+
+  useEffect(() => {
+    if (!showDropdown) return undefined;
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+
+      if (
+        searchShellRef.current?.contains(target) ||
+        searchPanelRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      closeSearch();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [closeSearch, showDropdown]);
 
   useEffect(() => {
     const syncPrivateHistory = () => {
@@ -150,9 +218,7 @@ function TopBar() {
     const q = nextQuery.trim();
 
     if (!q) {
-      setSearchResults([]);
-      setShowDropdown(false);
-      setHasSearched(false);
+      closeSearch();
       return;
     }
 
@@ -175,9 +241,7 @@ function TopBar() {
 
     if (e.key === "Escape") {
       setQuery("");
-      setSearchResults([]);
-      setShowDropdown(false);
-      setHasSearched(false);
+      closeSearch();
     }
   };
 
@@ -186,9 +250,7 @@ function TopBar() {
     setQuery(value);
 
     if (value.trim().length < 2) {
-      setSearchResults([]);
-      setShowDropdown(false);
-      setHasSearched(false);
+      closeSearch();
       return;
     }
 
@@ -200,10 +262,65 @@ function TopBar() {
 
     setShowDropdown(false);
     setQuery("");
-    setSearchResults([]);
-    setHasSearched(false);
+    closeSearch();
     navigate(result.href);
   };
+
+  const searchPanel =
+    showDropdown && searchPanelStyle && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="fixed z-[1000] overflow-y-auto rounded-2xl border border-white/10 bg-[#101010]/95 p-2 text-white shadow-[0_28px_90px_rgba(0,0,0,0.65)] backdrop-blur-xl"
+            data-testid="topbar-search-panel"
+            ref={searchPanelRef}
+            style={{
+              left: `${searchPanelStyle.left}px`,
+              maxHeight: `${searchPanelStyle.maxHeight}px`,
+              top: `${searchPanelStyle.top}px`,
+              width: `${searchPanelStyle.width}px`,
+            }}
+          >
+            {searchResults.length > 0 ? (
+              groupedSearchResults.map((group) => (
+                <div key={group.label} className="py-1">
+                  <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">
+                    {group.label}
+                  </p>
+
+                  {group.items.map((result) => (
+                    <button
+                      key={`${result.type}-${result.title}-${result.subtitle}`}
+                      className="flex w-full items-start justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-white/10"
+                      onClick={() => openSearchResult(result)}
+                      type="button"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-white">
+                          {result.title}
+                        </span>
+                        <span className="block truncate text-xs text-gray-400">
+                          {result.subtitle}
+                        </span>
+                      </span>
+
+                      <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold text-gray-300">
+                        {result.source}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ))
+            ) : (
+              hasSearched && (
+                <div className="px-4 py-5 text-sm text-gray-400">
+                  No results found
+                </div>
+              )
+            )}
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <>
@@ -218,7 +335,7 @@ function TopBar() {
         title="Admin Login"
       />
 
-      <div className="premium-topbar min-h-16 bg-black flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 px-4 py-3 text-white">
+      <div className="premium-topbar relative z-[900] min-h-16 bg-black flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 px-4 py-3 text-white">
         <div className="flex items-center gap-4">
           <button
             aria-label="Go to public dashboard"
@@ -240,7 +357,10 @@ function TopBar() {
             <FaHome size={20} />
           </button>
 
-          <div className="relative flex w-full items-center gap-2 rounded-full bg-[#1f1f1f] px-4 py-2 hover:bg-[#2a2a2a]">
+          <div
+            className="relative flex w-full items-center gap-2 rounded-full bg-[#1f1f1f] px-4 py-2 hover:bg-[#2a2a2a]"
+            ref={searchShellRef}
+          >
             <button
               onClick={() => runSearch(query)}
               type="button"
@@ -258,49 +378,6 @@ function TopBar() {
               aria-label="Search songs, artists, albums, and recommendations"
               className="bg-transparent outline-none text-sm w-full placeholder-gray-400"
             />
-
-            {showDropdown && (
-              <div className="absolute left-0 right-0 top-12 z-50 max-h-[70vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#101010]/95 p-2 shadow-2xl backdrop-blur">
-                {searchResults.length > 0 ? (
-                  groupedSearchResults.map((group) => (
-                    <div key={group.label} className="py-1">
-                      <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">
-                        {group.label}
-                      </p>
-
-                      {group.items.map((result) => (
-                        <button
-                          key={`${result.type}-${result.title}-${result.subtitle}`}
-                          className="flex w-full items-start justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-white/10"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => openSearchResult(result)}
-                          type="button"
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-semibold text-white">
-                              {result.title}
-                            </span>
-                            <span className="block truncate text-xs text-gray-400">
-                              {result.subtitle}
-                            </span>
-                          </span>
-
-                          <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold text-gray-300">
-                            {result.source}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ))
-                ) : (
-                  hasSearched && (
-                    <div className="px-4 py-5 text-sm text-gray-400">
-                      No results found
-                    </div>
-                  )
-                )}
-              </div>
-            )}
           </div>
         </div>
 
@@ -373,6 +450,8 @@ function TopBar() {
           </button>
         </div>
       </div>
+
+      {searchPanel}
     </>
   );
 }
