@@ -1,5 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -89,6 +96,49 @@ export function getAdminSessionSecret(env = process.env) {
 
 function signValue(value, secret) {
   return createHmac("sha256", secret).update(value).digest("base64url");
+}
+
+function getEncryptionKey(secret) {
+  return createHash("sha256").update(secret).digest();
+}
+
+export function encryptRefreshToken(refreshToken, secret = getAdminSessionSecret()) {
+  if (!refreshToken || !secret) return "";
+
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", getEncryptionKey(secret), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(refreshToken, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return [iv, tag, encrypted].map((part) => part.toString("base64url")).join(".");
+}
+
+export function decryptRefreshToken(
+  encryptedRefreshToken,
+  secret = getAdminSessionSecret(),
+) {
+  if (!encryptedRefreshToken || !secret) return "";
+
+  try {
+    const [ivValue, tagValue, encryptedValue] = encryptedRefreshToken.split(".");
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      getEncryptionKey(secret),
+      Buffer.from(ivValue, "base64url"),
+    );
+
+    decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedValue, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+  } catch {
+    return "";
+  }
 }
 
 function signaturesMatch(left, right) {
@@ -506,13 +556,12 @@ export async function writePublicSyncPayload(payload) {
   return normalizedPayload;
 }
 
-async function fetchSpotifyAccessToken() {
-  const refreshToken = process.env.SPOTIFY_REFRESH_TOKEN;
+async function fetchSpotifyAccessToken(refreshToken) {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
   const config = getServerSyncConfigStatus();
 
-  if (!config.configured) {
+  if (!refreshToken || !clientId) {
     const missing = config.missing_required_env.join(", ");
     const error = new Error(
       `Spotify server-side sync is missing required Vercel env vars: ${missing}.`,
@@ -560,7 +609,10 @@ async function fetchSpotifyAccessToken() {
     throw error;
   }
 
-  return data.access_token;
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token || "",
+  };
 }
 
 async function fetchSpotifyJson(url, accessToken, allowEmpty = false) {
@@ -587,7 +639,13 @@ export async function runSpotifyListeningSync() {
   const existingPayload = await readPublicSyncPayload();
 
   try {
-    const accessToken = await fetchSpotifyAccessToken();
+    const storedRefreshToken = decryptRefreshToken(
+      existingPayload.encrypted_refresh_token,
+    );
+    const tokenResult = await fetchSpotifyAccessToken(
+      storedRefreshToken || process.env.SPOTIFY_REFRESH_TOKEN,
+    );
+    const accessToken = tokenResult.accessToken;
     const [recentlyPlayed, currentlyPlaying] = await Promise.all([
       fetchSpotifyJson(
         "https://api.spotify.com/v1/me/player/recently-played?limit=50",
@@ -605,9 +663,13 @@ export async function runSpotifyListeningSync() {
       .filter(Boolean);
     const merged = upsertPublicPlays(existingPayload, incomingPlays);
     const finishedAt = new Date().toISOString();
+    const encryptedRefreshToken = tokenResult.refreshToken
+      ? encryptRefreshToken(tokenResult.refreshToken)
+      : existingPayload.encrypted_refresh_token;
 
     const nextPayload = await writePublicSyncPayload({
       ...existingPayload,
+      encrypted_refresh_token: encryptedRefreshToken,
       plays: merged.plays,
       last_sync_started_at: startedAt,
       last_sync_finished_at: finishedAt,

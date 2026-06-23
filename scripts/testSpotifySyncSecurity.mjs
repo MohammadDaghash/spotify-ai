@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 
 import {
   createAdminSessionCookie,
+  decryptRefreshToken,
+  encryptRefreshToken,
+  buildPublicStatus,
   getServerSyncConfigStatus,
   verifyAdminSessionCookie,
 } from "../api/lib/publicListeningSync.js";
@@ -64,6 +67,25 @@ const configuredWithBlob = getServerSyncConfigStatus({
 assert.equal(configuredWithBlob.configured, true);
 assert.equal(configuredWithBlob.storage_persistent, true);
 assert.deepEqual(configuredWithBlob.missing_recommended_env, []);
+
+const encryptedRefreshToken = encryptRefreshToken(
+  "rotated-refresh-token",
+  "encryption-secret",
+);
+
+assert.notEqual(encryptedRefreshToken, "rotated-refresh-token");
+assert.equal(
+  decryptRefreshToken(encryptedRefreshToken, "encryption-secret"),
+  "rotated-refresh-token",
+);
+assert.equal(decryptRefreshToken(encryptedRefreshToken, "wrong-secret"), "");
+
+const publicStatus = buildPublicStatus({
+  encrypted_refresh_token: encryptedRefreshToken,
+  last_sync_status: "success",
+});
+
+assert.equal("encrypted_refresh_token" in publicStatus, false);
 
 const cookie = createAdminSessionCookie({
   email: "mohammad.da1212@gmail.com",
