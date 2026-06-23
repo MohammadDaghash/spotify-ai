@@ -19,6 +19,7 @@
     "test:spotify-user-data": "node scripts/testSpotifyUserDataFlow.mjs",
     "test:spotify-refresh-token-setup": "node scripts/testSpotifyRefreshTokenSetup.mjs",
     "test:topbar-search": "node scripts/testTopbarSearch.mjs",
+    "test:artwork-ux": "node scripts/testArtworkUx.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -168,7 +168,12 @@ function RankingImage({ row, onImageError }) {
     return (
       <img
         src={row.imageUrl}
-        alt={row.name || row.artistName || row.albumName || "Ranking artwork"}
+        alt={
+          row.name ||
+          row.artistName ||
+          row.albumName ||
+          "Ranking cover or artist image"
+        }
         className={`artwork-frame h-12 w-12 object-cover bg-[#2a2a2a] ${shapeClass}`}
         loading="lazy"
         onError={() => onImageError?.(row.imageKey)}
@@ -722,6 +727,46 @@ function Dashboard() {
     return rankingImageRows.filter((row) => rankingImages[row.imageKey]).length;
   }, [rankingImageRows, rankingImages]);
 
+  const coverImageStatusText = useMemo(() => {
+    if (!canLoadSpotifyArtwork) {
+      return "Sign in with Spotify to load official album covers and artist images.";
+    }
+
+    const statusParts = [
+      `Album covers / artist images loaded: ${cachedRankingImageCount}/${rankingImageRows.length}`,
+    ];
+
+    if (rankingImageStatus.requested > 0) {
+      statusParts.push(
+        `Current pass: ${rankingImageStatus.loaded} loaded, ${rankingImageStatus.failed} unmatched`,
+      );
+    }
+
+    if (rankingImageStatus.rateLimited) {
+      statusParts.push(
+        "Spotify is limiting cover/image requests. Wait a moment, then retry.",
+      );
+    } else if (rankingImageStatus.authError) {
+      statusParts.push("Spotify login needs refresh before images can load.");
+    } else if (rankingImageStatus.done && rankingImageStatus.failed > 0) {
+      statusParts.push(
+        "Some album covers or artist images were not matched. Retry can check again.",
+      );
+    }
+
+    return statusParts.join(" • ");
+  }, [
+    cachedRankingImageCount,
+    canLoadSpotifyArtwork,
+    rankingImageRows.length,
+    rankingImageStatus.authError,
+    rankingImageStatus.done,
+    rankingImageStatus.failed,
+    rankingImageStatus.loaded,
+    rankingImageStatus.rateLimited,
+    rankingImageStatus.requested,
+  ]);
+
   const retryRankingImages = () => {
     setRankingImages({});
     rankingImagesRef.current = {};
@@ -1220,25 +1265,21 @@ function Dashboard() {
 
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 bg-[#181818] rounded-lg p-4 border border-white/10">
               <p className="text-sm text-gray-300">
-                {canLoadSpotifyArtwork
-                  ? `Artwork loaded: ${cachedRankingImageCount}/${rankingImageRows.length}`
-                  : "Sign in with Spotify to load official artwork"}
-                {canLoadSpotifyArtwork && rankingImageStatus.requested > 0
-                  ? ` • Current pass: ${rankingImageStatus.loaded} loaded, ${rankingImageStatus.failed} unmatched`
-                  : ""}
-                {canLoadSpotifyArtwork && rankingImageStatus.rateLimited
-                  ? " • Spotify is slowing requests, continuing carefully"
-                  : ""}
-                {canLoadSpotifyArtwork && rankingImageStatus.authError
-                  ? " • Spotify login needs refresh"
-                  : ""}
+                {coverImageStatusText}
               </p>
 
               <button
                 onClick={retryRankingImages}
-                className="bg-[#2a2a2a] hover:bg-[#333] text-white text-sm font-semibold px-4 py-2 rounded-full"
+                disabled={!canLoadSpotifyArtwork}
+                className="bg-[#2a2a2a] hover:bg-[#333] disabled:cursor-not-allowed disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-full"
+                title={
+                  canLoadSpotifyArtwork
+                    ? "Retry loading Spotify album covers and artist images"
+                    : "Sign in with Spotify before retrying image loading"
+                }
+                type="button"
               >
-                Retry artwork
+                Retry covers
               </button>
             </div>
 
