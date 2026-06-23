@@ -56,7 +56,7 @@ function getBlobTokenOption() {
 
 function getBlobUploadOptions(extra = {}) {
   const options = {
-    access: "public",
+    access: "private",
     ...getBlobTokenOption(),
     ...extra,
   };
@@ -411,29 +411,16 @@ function normalizePayload(payload) {
 async function readBlobPayload() {
   if (!hasBlobToken()) return null;
 
-  const { list } = await import("@vercel/blob");
-  const { blobs } = await list({
+  const { get } = await import("@vercel/blob");
+  const result = await get(getStoragePath(), {
     ...getBlobTokenOption(),
-    prefix: getStoragePath(),
-    limit: 10,
-  });
-  const blob = blobs.find((item) => item.pathname === getStoragePath());
-
-  if (!blob?.url) return emptyPayload();
-
-  const separator = blob.url.includes("?") ? "&" : "?";
-  const response = await fetch(`${blob.url}${separator}v=${Date.now()}`, {
-    cache: "no-store",
+    access: "private",
+    useCache: false,
   });
 
-  if (!response.ok) {
-    return emptyPayload({
-      last_sync_status: "read_error",
-      last_sync_error: "Stored public sync data could not be read.",
-    });
-  }
+  if (!result?.stream || result.statusCode !== 200) return emptyPayload();
 
-  return normalizePayload(await response.json());
+  return normalizePayload(await new Response(result.stream).json());
 }
 
 async function writeBlobPayload(payload) {
