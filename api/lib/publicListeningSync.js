@@ -42,6 +42,17 @@ function getStoragePath() {
   return process.env.SPOTIFY_SYNC_STORAGE_PATH || DEFAULT_STORAGE_PATH;
 }
 
+function getSnapshotStoragePath() {
+  const storagePath = getStoragePath();
+  const timestamp = Date.now();
+
+  if (storagePath.endsWith(".json")) {
+    return storagePath.replace(/\.json$/, `-${timestamp}.json`);
+  }
+
+  return `${storagePath}-${timestamp}.json`;
+}
+
 function hasBlobToken() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
@@ -56,7 +67,7 @@ function getBlobTokenOption() {
 
 function getBlobUploadOptions(extra = {}) {
   const options = {
-    access: "private",
+    access: "public",
     ...getBlobTokenOption(),
     ...extra,
   };
@@ -411,24 +422,42 @@ function normalizePayload(payload) {
 async function readBlobPayload() {
   if (!hasBlobToken()) return null;
 
-  const { get } = await import("@vercel/blob");
-  const result = await get(getStoragePath(), {
+  const { list } = await import("@vercel/blob");
+  const { blobs } = await list({
     ...getBlobTokenOption(),
-    access: "private",
-    useCache: false,
+    prefix: getStoragePath().replace(/\.json$/, ""),
+    limit: 100,
   });
 
-  if (!result?.stream || result.statusCode !== 200) return emptyPayload();
+  const newestBlob = blobs
+    .filter((blob) => blob.pathname.startsWith(getStoragePath().replace(/\.json$/, "")))
+    .sort((left, right) => {
+      return new Date(right.uploadedAt).getTime() - new Date(left.uploadedAt).getTime();
+    })[0];
 
-  return normalizePayload(await new Response(result.stream).json());
+  if (!newestBlob?.url) return emptyPayload();
+
+  const separator = newestBlob.url.includes("?") ? "&" : "?";
+  const response = await fetch(`${newestBlob.url}${separator}v=${Date.now()}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return emptyPayload({
+      last_sync_status: "read_error",
+      last_sync_error: "Stored public sync data could not be read.",
+    });
+  }
+
+  return normalizePayload(await response.json());
 }
 
 async function writeBlobPayload(payload) {
   const { put } = await import("@vercel/blob");
 
-  await put(getStoragePath(), JSON.stringify(payload, null, 2), {
+  await put(getSnapshotStoragePath(), JSON.stringify(payload, null, 2), {
     ...getBlobUploadOptions({
-      allowOverwrite: true,
+      addRandomSuffix: false,
       contentType: "application/json",
       cacheControlMaxAge: 0,
     }),
