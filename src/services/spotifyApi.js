@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clearSpotifyTokens } from "../utils/localSpotifyHistory.js";
 
 const BASE_URL = "https://api.spotify.com/v1";
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
@@ -12,6 +13,36 @@ let refreshPromise = null;
 const spotifyApi = axios.create({
   baseURL: BASE_URL,
 });
+
+function getSpotifyApiErrorMessage(error) {
+  const status = error?.response?.status;
+
+  if (status === 401) {
+    return "Your Spotify session expired. Continue with Spotify again to refresh your private data.";
+  }
+
+  if (status === 403) {
+    return "Spotify blocked this request. If the app is in Development Mode, your Spotify email must be added as a test user.";
+  }
+
+  if (status === 429) {
+    return "Spotify rate-limited this request. Wait a moment and try again.";
+  }
+
+  if (error?.message === "Missing Spotify refresh token") {
+    return "Spotify login is incomplete. Continue with Spotify again.";
+  }
+
+  return "Spotify API request failed. Try signing in again.";
+}
+
+function redirectToSpotifyLoginWithError(error) {
+  const message = getSpotifyApiErrorMessage(error);
+
+  clearSpotifyTokens();
+  sessionStorage.setItem("spotify_auth_error", message);
+  window.location.href = `/login?spotify_error=${encodeURIComponent(message)}`;
+}
 
 async function refreshAccessToken() {
   const refreshToken = localStorage.getItem("spotify_refresh_token");
@@ -76,10 +107,7 @@ spotifyApi.interceptors.request.use(async (config) => {
   try {
     token = await getFreshAccessToken();
   } catch (err) {
-    localStorage.removeItem("spotify_access_token");
-    localStorage.removeItem("spotify_token_expires_at");
-    localStorage.removeItem("spotify_refresh_token");
-    window.location.href = "/login";
+    redirectToSpotifyLoginWithError(err);
     return Promise.reject(err);
   }
 
@@ -99,18 +127,12 @@ spotifyApi.interceptors.response.use(
         err.config.headers.Authorization = `Bearer ${token}`;
         return spotifyApi(err.config);
       } catch {
-        localStorage.removeItem("spotify_access_token");
-        localStorage.removeItem("spotify_token_expires_at");
-        localStorage.removeItem("spotify_refresh_token");
-        window.location.href = "/login";
+        redirectToSpotifyLoginWithError(err);
       }
     }
 
     if (err.response?.status === 401) {
-      localStorage.removeItem("spotify_access_token");
-      localStorage.removeItem("spotify_token_expires_at");
-      localStorage.removeItem("spotify_refresh_token");
-      window.location.href = "/login";
+      redirectToSpotifyLoginWithError(err);
     }
     return Promise.reject(err);
   }

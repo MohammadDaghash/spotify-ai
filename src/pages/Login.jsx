@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import {
   getSpotifyRedirectUri,
@@ -7,14 +7,32 @@ import {
 } from "../services/spotifyAuth";
 import {
   readSpotifyHistoryFiles,
+  returnToPublicDemoMode,
   saveLocalSpotifyHistory,
 } from "../utils/localSpotifyHistory.js";
 
+function readInitialSpotifyLoginError(search) {
+  const params = new URLSearchParams(search);
+  const callbackError =
+    params.get("spotify_error") ||
+    sessionStorage.getItem("spotify_auth_error") ||
+    "";
+
+  if (callbackError) {
+    sessionStorage.removeItem("spotify_auth_error");
+  }
+
+  return callbackError;
+}
+
 function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [importStatus, setImportStatus] = useState("");
   const [importError, setImportError] = useState("");
-  const [spotifyLoginError, setSpotifyLoginError] = useState("");
+  const [spotifyLoginError, setSpotifyLoginError] = useState(() =>
+    readInitialSpotifyLoginError(location.search),
+  );
   const requiredRedirectUri = getSpotifyRedirectUri();
 
   const handleLogin = async () => {
@@ -58,6 +76,11 @@ function Login() {
     }
   };
 
+  const handleBackToDemo = () => {
+    returnToPublicDemoMode();
+    navigate("/dashboard");
+  };
+
   return (
     <div className="app-shell min-h-screen bg-black text-white flex items-center justify-center px-4 py-10">
       <div className="fade-in bg-[#121212] p-8 rounded-lg w-full max-w-3xl border border-white/10">
@@ -75,12 +98,13 @@ function Login() {
             </p>
           </div>
 
-          <Link
-            to="/dashboard"
+          <button
+            onClick={handleBackToDemo}
             className="text-sm text-gray-300 hover:text-white underline"
+            type="button"
           >
             Back to demo
-          </Link>
+          </button>
         </div>
 
         <button

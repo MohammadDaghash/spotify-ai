@@ -8,7 +8,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSpotifyContext } from "../context/SpotifyContext.jsx";
 import { allSpotifyHistory } from "../data/loadSpotifyHistory.js";
 import { parseSpotifyHistory } from "../utils/spotifyDataParser.js";
-import { readLocalSpotifyHistory } from "../utils/localSpotifyHistory.js";
+import {
+  PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
+  readLocalSpotifyHistory,
+} from "../utils/localSpotifyHistory.js";
 import { dedupeHistoryEntries } from "../utils/publicListeningHistory.js";
 import {
   addRankMovementToRows,
@@ -257,9 +260,10 @@ function Dashboard() {
   );
   const displayedSpotifyHistory =
     localSpotifyHistory.length > 0 ? localSpotifyHistory : publicSpotifyHistory;
+  const isPrivateSpotifyHistory = localSpotifyHistory.length > 0;
   const historySourceLabel =
-    localSpotifyHistory.length > 0
-      ? "Your uploaded Spotify history"
+    isPrivateSpotifyHistory
+      ? "Your private Spotify data stored in this browser"
       : publicSyncedHistory.length > 0
         ? "Public demo Spotify history + synced recent Spotify plays"
         : "Public demo Spotify history";
@@ -314,9 +318,19 @@ function Dashboard() {
     };
 
     window.addEventListener("focus", refreshLocalHistory);
+    window.addEventListener("storage", refreshLocalHistory);
+    window.addEventListener(
+      PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
+      refreshLocalHistory,
+    );
 
     return () => {
       window.removeEventListener("focus", refreshLocalHistory);
+      window.removeEventListener("storage", refreshLocalHistory);
+      window.removeEventListener(
+        PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
+        refreshLocalHistory,
+      );
     };
   }, []);
 
@@ -516,7 +530,9 @@ function Dashboard() {
     }),
     [historySummary, parsedSpotifyData, previousParsedSpotifyData],
   );
-  const dashboardData = mlDashboardData || fallbackDashboardData;
+  const dashboardData = isPrivateSpotifyHistory
+    ? fallbackDashboardData
+    : mlDashboardData || fallbackDashboardData;
   const mlSummary = dashboardData?.summary;
 
   const formatNumber = (value) => {
@@ -872,7 +888,7 @@ function Dashboard() {
             <div className="mb-4 bg-[#181818] rounded-lg p-4 border border-white/10">
               <p className="text-sm text-gray-400">Python ML Backend</p>
 
-              {mlDashboardData ? (
+              {mlDashboardData && !isPrivateSpotifyHistory ? (
                 <>
                   <p className="text-green-400 font-semibold">
                     Connected — {mlDashboardData.summary.total_streams} streams
@@ -892,7 +908,8 @@ function Dashboard() {
               ) : (
                 <>
                   <p className="text-green-400 font-semibold">
-                    Public demo mode — {formatNumber(historySummary.totalStreams)}{" "}
+                    {isPrivateSpotifyHistory ? "Private mode" : "Public demo mode"}{" "}
+                    — {formatNumber(historySummary.totalStreams)}{" "}
                     streams analyzed in the browser
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
@@ -976,7 +993,11 @@ function Dashboard() {
                 title="Streams analyzed"
                 value={dashboardTotalStreams}
                 subtitle={
-                  mlDashboardData ? "From Python/pandas" : "From public history"
+                  isPrivateSpotifyHistory
+                    ? "From private browser data"
+                    : mlDashboardData
+                      ? "From Python/pandas"
+                      : "From public history"
                 }
               />
               <StatCard

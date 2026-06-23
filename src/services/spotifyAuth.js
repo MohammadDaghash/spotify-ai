@@ -1,7 +1,7 @@
 const env = import.meta.env || {};
 const CLIENT_ID = env.VITE_SPOTIFY_CLIENT_ID;
 const CONFIGURED_REDIRECT_URI = env.VITE_SPOTIFY_REDIRECT_URI;
-const SCOPES = [
+export const SPOTIFY_SCOPES = [
   "user-read-private",
   "user-read-email",
   "user-library-read",
@@ -14,7 +14,9 @@ const SCOPES = [
   // REQUIRED FOR PLAY
   "user-read-playback-state",
   "user-modify-playback-state",
-].join(" ");
+];
+
+const SCOPES = SPOTIFY_SCOPES.join(" ");
 
 function isLoopbackOrigin(origin) {
   return /^https?:\/\/(?:127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(
@@ -85,6 +87,18 @@ export function generateCodeVerifier(length = 128) {
   return verifier;
 }
 
+export function generateAuthState(length = 32) {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let state = "";
+
+  for (let i = 0; i < length; i++) {
+    state += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return state;
+}
+
 export async function generateCodeChallenge(codeVerifier) {
   const encoder = new TextEncoder();
   const data = encoder.encode(codeVerifier);
@@ -100,6 +114,7 @@ export function buildSpotifyAuthorizeUrl({
   clientId = CLIENT_ID,
   redirectUri = getSpotifyRedirectUri(),
   codeChallenge,
+  state = "",
   scopes = SCOPES,
 }) {
   const params = new URLSearchParams({
@@ -111,7 +126,59 @@ export function buildSpotifyAuthorizeUrl({
     code_challenge: codeChallenge,
   });
 
+  if (state) {
+    params.set("state", state);
+  }
+
   return new URL(`https://accounts.spotify.com/authorize?${params.toString()}`);
+}
+
+export function getSpotifyCallbackErrorMessage({
+  error = "",
+  tokenError = null,
+  missing = "",
+} = {}) {
+  if (error === "access_denied") {
+    return "Spotify permission was denied. Click Continue with Spotify and approve the requested access to use your own data.";
+  }
+
+  if (error) {
+    return `Spotify authorization failed: ${error}`;
+  }
+
+  if (missing === "state") {
+    return "Spotify login session expired. Start the Spotify sign-in again.";
+  }
+
+  if (missing === "code") {
+    return "Spotify did not return an authorization code. Start the Spotify sign-in again.";
+  }
+
+  if (missing === "config") {
+    return "Spotify login is missing required browser configuration. Check the Spotify client ID and redirect URI.";
+  }
+
+  if (missing === "token") {
+    return "Spotify did not return an access token. Start the Spotify sign-in again.";
+  }
+
+  const responseData = tokenError?.response?.data || {};
+  const description = String(responseData.error_description || "");
+  const spotifyError = String(responseData.error || "");
+
+  if (/redirect/i.test(description) || spotifyError === "invalid_grant") {
+    return "Spotify rejected the callback. Confirm this exact redirect URI is added in Spotify Developer Dashboard: https://spotify-ai-sooty.vercel.app/callback";
+  }
+
+  if (tokenError?.response?.status === 401 || spotifyError === "invalid_client") {
+    return "Spotify rejected the app credentials. Check the Spotify Client ID configuration.";
+  }
+
+  if (tokenError?.message) {
+    return `Spotify login failed: ${tokenError.message}`;
+  }
+
+  return "Spotify login failed. Try again.";
 }
 
 export async function redirectToSpotifyLogin() {
@@ -127,12 +194,15 @@ export async function redirectToSpotifyLogin() {
 
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
+  const state = generateAuthState();
   sessionStorage.setItem("spotify_code_verifier", codeVerifier);
   sessionStorage.setItem("spotify_redirect_uri", redirectUri);
+  sessionStorage.setItem("spotify_auth_state", state);
   const authorizeUrl = buildSpotifyAuthorizeUrl({
     clientId: CLIENT_ID,
     redirectUri,
     codeChallenge,
+    state,
   });
   window.location.href = authorizeUrl.toString();
 }

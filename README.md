@@ -142,6 +142,29 @@ http://127.0.0.1:5173/callback
 http://127.0.0.1:5174/callback
 ```
 
+### Spotify Development Mode and Test Users
+
+Spotify app mode is not exposed to this codebase or the Vercel deployment. Spotify documents app status and allowlisting in its [quota modes guide](https://developer.spotify.com/documentation/web-api/concepts/quota-modes). Verify the current mode in Spotify Developer Dashboard:
+
+1. Open [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+2. Select the Spotify app used by `VITE_SPOTIFY_CLIENT_ID`.
+3. Open **Settings**.
+4. Check **App Status**.
+
+If the app is in **Development Mode**, random public visitors cannot fully use Spotify sign-in unless they are allowlisted. Spotify may let them complete the login screen, but Web API calls can return `403` until they are added as test users.
+
+To add test users:
+
+1. Open [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+2. Select the app.
+3. Open **Settings**.
+4. Open **Users Management**.
+5. Click **Add new user**.
+6. Enter the tester's name and the exact email address on their Spotify account.
+7. Ask the tester to try **Continue with Spotify** again.
+
+Development Mode is suitable for the owner and a small allowlist. For random public visitors to sign in with their own Spotify accounts, request Spotify extended quota mode from the app's dashboard.
+
 ### Generate `SPOTIFY_REFRESH_TOKEN`
 
 The production sync job needs a server-side Spotify refresh token. Generate it locally only; do not commit it and do not put it in frontend `VITE_` variables.

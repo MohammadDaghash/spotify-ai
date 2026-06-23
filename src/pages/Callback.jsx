@@ -1,7 +1,14 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { getSpotifyRedirectUri } from "../services/spotifyAuth.js";
+import {
+  getSpotifyCallbackErrorMessage,
+  getSpotifyRedirectUri,
+} from "../services/spotifyAuth.js";
+import {
+  clearSpotifyTokens,
+  enablePrivateSpotifyDataMode,
+} from "../utils/localSpotifyHistory.js";
 
 const env = import.meta.env || {};
 const CLIENT_ID = env.VITE_SPOTIFY_CLIENT_ID;
@@ -13,24 +20,44 @@ function Callback() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    function failLogin(message) {
+      clearSpotifyTokens();
+      sessionStorage.setItem("spotify_auth_error", message);
+      navigate(`/login?spotify_error=${encodeURIComponent(message)}`, {
+        replace: true,
+      });
+    }
+
     async function exchangeToken() {
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
       const error = params.get("error");
+      const returnedState = params.get("state");
 
-      if (error || !code) {
-        navigate("/login", { replace: true });
+      if (error) {
+        failLogin(getSpotifyCallbackErrorMessage({ error }));
+        return;
+      }
+
+      if (!code) {
+        failLogin(getSpotifyCallbackErrorMessage({ missing: "code" }));
         return;
       }
 
       const codeVerifier = sessionStorage.getItem("spotify_code_verifier");
+      const expectedState = sessionStorage.getItem("spotify_auth_state");
       const redirectUri =
         sessionStorage.getItem("spotify_redirect_uri") ||
         getSpotifyRedirectUri();
 
+      if (!expectedState || returnedState !== expectedState) {
+        failLogin(getSpotifyCallbackErrorMessage({ missing: "state" }));
+        return;
+      }
+
       if (!codeVerifier || !redirectUri || !CLIENT_ID) {
         console.error("Missing Spotify callback configuration");
-        navigate("/login", { replace: true });
+        failLogin(getSpotifyCallbackErrorMessage({ missing: "config" }));
         return;
       }
 
@@ -52,7 +79,8 @@ function Callback() {
         const { access_token, expires_in, refresh_token } = res.data;
 
         if (!access_token) {
-          throw new Error("No access token returned from Spotify");
+          failLogin(getSpotifyCallbackErrorMessage({ missing: "token" }));
+          return;
         }
 
         localStorage.setItem("spotify_access_token", access_token);
@@ -65,13 +93,16 @@ function Callback() {
           localStorage.setItem("spotify_refresh_token", refresh_token);
         }
 
+        enablePrivateSpotifyDataMode();
         sessionStorage.removeItem("spotify_code_verifier");
         sessionStorage.removeItem("spotify_redirect_uri");
+        sessionStorage.removeItem("spotify_auth_state");
+        sessionStorage.removeItem("spotify_auth_error");
 
         navigate("/dashboard", { replace: true });
       } catch (err) {
         console.error("Token exchange failed", err);
-        navigate("/login", { replace: true });
+        failLogin(getSpotifyCallbackErrorMessage({ tokenError: err }));
       }
     }
 

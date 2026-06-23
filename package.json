@@ -16,6 +16,7 @@
     "test:recommendation-replacement": "node scripts/testRecommendationReplacement.mjs",
     "test:spotify-sync-security": "node scripts/testSpotifySyncSecurity.mjs",
     "test:spotify-sync": "node scripts/testSpotifyPublicSync.mjs",
+    "test:spotify-user-data": "node scripts/testSpotifyUserDataFlow.mjs",
     "test:spotify-refresh-token-setup": "node scripts/testSpotifyRefreshTokenSetup.mjs",
     "preview": "vite preview"
   },

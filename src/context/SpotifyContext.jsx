@@ -8,6 +8,11 @@ import {
 } from "react";
 import spotifyApi from "../services/spotifyApi";
 import { getListeningSyncStatus, syncRecentlyPlayed } from "../services/mlApi";
+import {
+  mapCurrentlyPlayingToHistoryEntry,
+  mapSpotifyPlaysToHistoryEntries,
+  saveSpotifyApiHistory,
+} from "../utils/localSpotifyHistory.js";
 
 /**
  * SpotifyContext
@@ -410,11 +415,36 @@ export function SpotifyProvider({ children }) {
         : null;
     const currentPlay = mapCurrentlyPlayingToSyncPlay(currentlyPlayingData);
     const plays = currentPlay ? [...recentPlays, currentPlay] : recentPlays;
+    const browserHistoryEntries = [
+      ...mapSpotifyPlaysToHistoryEntries(plays),
+      ...mapCurrentlyPlayingToHistoryEntry(currentlyPlayingData),
+    ];
+    const savedBrowserHistory =
+      browserHistoryEntries.length > 0
+        ? saveSpotifyApiHistory(browserHistoryEntries)
+        : [];
+    let syncResponse = {
+      sync: {
+        total_plays: savedBrowserHistory.length,
+        last_sync_status: "browser_private",
+      },
+    };
 
-    const syncResponse =
-      plays.length > 0
-        ? await syncRecentlyPlayed(plays)
-        : await getListeningSyncStatus();
+    try {
+      syncResponse =
+        plays.length > 0
+          ? await syncRecentlyPlayed(plays)
+          : await getListeningSyncStatus();
+    } catch (error) {
+      syncResponse = {
+        sync: {
+          ...syncResponse.sync,
+          error:
+            error.message ||
+            "Private Spotify data is available in this browser, but the ML sync endpoint is unavailable.",
+        },
+      };
+    }
 
     const currentlyPlaying =
       currentlyPlayingData ? mapCurrentlyPlaying(currentlyPlayingData) : null;
@@ -422,6 +452,7 @@ export function SpotifyProvider({ children }) {
     const nextStatus = {
       ...(syncResponse.sync || {}),
       currently_playing: currentlyPlaying,
+      browser_private_plays: savedBrowserHistory.length,
       last_checked_at: new Date().toISOString(),
     };
 
