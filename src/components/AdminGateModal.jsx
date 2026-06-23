@@ -4,7 +4,9 @@ import {
   getAdminUser,
   isAdmin,
   loginAdmin,
+  logoutAdmin,
 } from "../utils/adminAuth.js";
+import { loginAdminServerSession } from "../services/adminApi.js";
 
 function AdminGateModal({
   actionLabel,
@@ -16,12 +18,14 @@ function AdminGateModal({
 }) {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
   const resetForm = () => {
     setEmail("");
     setError("");
+    setIsSubmitting(false);
   };
 
   const handleClose = () => {
@@ -34,7 +38,7 @@ function AdminGateModal({
     onApproved?.(user);
   };
 
-  const handleAdminLogin = (event) => {
+  const handleAdminLogin = async (event) => {
     event?.preventDefault();
 
     const result = loginAdmin(email);
@@ -44,7 +48,34 @@ function AdminGateModal({
       return;
     }
 
-    approve(result.user);
+    try {
+      setIsSubmitting(true);
+      await loginAdminServerSession(result.user.email);
+      approve(result.user);
+    } catch (serverError) {
+      logoutAdmin();
+      setError(serverError.message || "Admin server session could not be created.");
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleContinueAsAdmin = async () => {
+    const user = getAdminUser();
+
+    if (!user?.email) {
+      setError("Admin login required.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await loginAdminServerSession(user.email);
+      approve(user);
+    } catch (serverError) {
+      logoutAdmin();
+      setError(serverError.message || "Admin server session could not be created.");
+      setIsSubmitting(false);
+    }
   };
 
   const alreadyAdmin = isAdmin();
@@ -69,11 +100,12 @@ function AdminGateModal({
 
         {alreadyAdmin ? (
           <button
-            onClick={() => approve(getAdminUser())}
+            onClick={handleContinueAsAdmin}
             className="mt-5 w-full rounded-full bg-white text-black font-semibold py-2"
+            disabled={isSubmitting}
             type="button"
           >
-            Continue as admin
+            {isSubmitting ? "Checking admin..." : "Continue as admin"}
           </button>
         ) : (
           <form onSubmit={handleAdminLogin}>
@@ -95,9 +127,10 @@ function AdminGateModal({
 
             <button
               className="mt-5 w-full rounded-full bg-white text-black font-semibold py-2"
+              disabled={isSubmitting}
               type="submit"
             >
-              Admin Login
+              {isSubmitting ? "Logging in..." : "Admin Login"}
             </button>
           </form>
         )}

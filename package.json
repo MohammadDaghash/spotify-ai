@@ -13,6 +13,7 @@
     "test:public-demo": "node scripts/testPublicDemoBugs.mjs",
     "test:public-listening-history": "node scripts/testPublicListeningHistory.mjs",
     "test:recommendation-replacement": "node scripts/testRecommendationReplacement.mjs",
+    "test:spotify-sync-security": "node scripts/testSpotifySyncSecurity.mjs",
     "test:spotify-sync": "node scripts/testSpotifyPublicSync.mjs",
     "preview": "vite preview"
   },

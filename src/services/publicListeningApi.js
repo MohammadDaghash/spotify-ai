@@ -3,6 +3,7 @@ import { mapPublicPlaysToHistory } from "../utils/publicListeningHistory.js";
 async function fetchJson(path, options = {}) {
   const response = await fetch(path, {
     cache: "no-store",
+    credentials: "include",
     ...options,
   });
 
@@ -26,9 +27,6 @@ export async function getPublicRecentPlays(limit = 300) {
 export async function syncPublicListeningNow() {
   return fetchJson("/api/listening/sync", {
     method: "POST",
-    headers: {
-      "x-spotify-ai-admin-action": "manual-sync",
-    },
   });
 }
 

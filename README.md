@@ -153,6 +153,7 @@ SPOTIFY_REFRESH_TOKEN
 SPOTIFY_CLIENT_SECRET
 BLOB_READ_WRITE_TOKEN
 CRON_SECRET
+ADMIN_SESSION_SECRET
 ```
 
 Set the server-only variables in Vercel Project Settings:
@@ -163,6 +164,7 @@ SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_optional_for_confidential_auth
 SPOTIFY_REFRESH_TOKEN=your_server_side_refresh_token
 BLOB_READ_WRITE_TOKEN=your_vercel_blob_read_write_token
 CRON_SECRET=generate_a_random_secret_at_least_16_chars
+ADMIN_SESSION_SECRET=generate_a_different_random_secret_at_least_32_chars
 ```
 
 Attach a Vercel Blob store to persist synced plays across deployments. The sync JSON contains only safe public play metadata, not OAuth tokens.
@@ -178,7 +180,7 @@ The production cron is configured in `vercel.json`:
 
 The Spotify Web API recently-played endpoint only returns the latest recent plays, not full lifetime history. This project keeps imported/exported history as the historical base and merges newly synced recent API plays into the public dashboard. Sync is idempotent and deduplicates by `track_id + played_at`.
 
-Admin-only manual sync is available from the Dashboard `Sync now` button. The current admin login is a lightweight frontend session, so the server endpoint is intentionally idempotent and returns no secrets. A real backend auth layer should be added before expanding admin-only write actions beyond this portfolio demo.
+Admin-only manual sync is available from the Dashboard `Sync now` button. The admin modal creates a signed HttpOnly cookie through `/api/admin/login`; the sync endpoint rejects POST requests without that cookie. Recommendation feedback still uses lightweight frontend admin mode until a full backend user system is added.
 
 Public sync endpoints:
 

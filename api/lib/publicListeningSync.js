@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -8,6 +9,9 @@ const LOCAL_STORAGE_PATH = path.join(
   "spotify-ai-public-recent-plays.json",
 );
 const MAX_STORED_PLAYS = 5000;
+const ADMIN_SESSION_COOKIE = "spotify_ai_admin_session";
+const DEFAULT_ADMIN_EMAIL = "mohammad.da1212@gmail.com";
+const ADMIN_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 
 function safeString(value) {
   return String(value || "").trim();
@@ -28,6 +32,10 @@ function normalizeIsoDate(value) {
 
 function normalizeEntityKey(value) {
   return safeString(value).toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeEmail(value) {
+  return safeString(value).toLowerCase();
 }
 
 function getStoragePath() {
@@ -60,11 +68,155 @@ export function getPublicSyncStorageMode() {
   return hasBlobToken() ? "vercel_blob" : "local_tmp";
 }
 
+export function getAdminEmail(env = process.env) {
+  return normalizeEmail(env.ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL);
+}
+
+export function getAdminSessionSecret(env = process.env) {
+  return safeString(env.ADMIN_SESSION_SECRET || env.CRON_SECRET);
+}
+
+function signValue(value, secret) {
+  return createHmac("sha256", secret).update(value).digest("base64url");
+}
+
+function signaturesMatch(left, right) {
+  const leftBuffer = Buffer.from(left || "");
+  const rightBuffer = Buffer.from(right || "");
+
+  if (leftBuffer.length !== rightBuffer.length) return false;
+
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function getCookieValue(cookieHeader, name) {
+  return String(cookieHeader || "")
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+}
+
+export function createAdminSessionCookie({
+  email,
+  now = Date.now(),
+  secret = getAdminSessionSecret(),
+  env = process.env,
+} = {}) {
+  const normalizedEmail = normalizeEmail(email);
+  const adminEmail = getAdminEmail(env);
+
+  if (!secret) {
+    throw new Error("Admin session secret is not configured.");
+  }
+
+  if (normalizedEmail !== adminEmail) {
+    throw new Error("Admin login required.");
+  }
+
+  const expiresAt = now + ADMIN_SESSION_TTL_MS;
+  const payload = `${normalizedEmail}|${expiresAt}`;
+  const signature = signValue(payload, secret);
+  const secureFlag = env.NODE_ENV === "production" ? "; Secure" : "";
+
+  return `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(
+    `${payload}|${signature}`,
+  )}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(
+    ADMIN_SESSION_TTL_MS / 1000,
+  )}${secureFlag}`;
+}
+
+export function createAdminSessionClearCookie(env = process.env) {
+  const secureFlag = env.NODE_ENV === "production" ? "; Secure" : "";
+
+  return `${ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureFlag}`;
+}
+
+export function verifyAdminSessionCookie({
+  cookieHeader,
+  now = Date.now(),
+  secret = getAdminSessionSecret(),
+  env = process.env,
+} = {}) {
+  if (!secret) {
+    return {
+      ok: false,
+      reason: "missing_admin_session_secret",
+    };
+  }
+
+  const rawCookie = getCookieValue(cookieHeader, ADMIN_SESSION_COOKIE);
+
+  if (!rawCookie) {
+    return {
+      ok: false,
+      reason: "missing_admin_session",
+    };
+  }
+
+  const [email, expiresAtValue, signature] = decodeURIComponent(rawCookie).split("|");
+  const normalizedEmail = normalizeEmail(email);
+  const expiresAt = Number(expiresAtValue);
+  const payload = `${normalizedEmail}|${expiresAtValue}`;
+  const expectedSignature = signValue(payload, secret);
+
+  if (normalizedEmail !== getAdminEmail(env)) {
+    return {
+      ok: false,
+      reason: "invalid_admin_email",
+    };
+  }
+
+  if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+    return {
+      ok: false,
+      reason: "expired_admin_session",
+    };
+  }
+
+  if (!signaturesMatch(signature, expectedSignature)) {
+    return {
+      ok: false,
+      reason: "invalid_admin_signature",
+    };
+  }
+
+  return {
+    ok: true,
+    user: {
+      email: normalizedEmail,
+      role: "admin",
+    },
+  };
+}
+
+export function getServerSyncConfigStatus(env = process.env) {
+  const missingRequiredEnv = [];
+  const missingRecommendedEnv = [];
+
+  if (!env.SPOTIFY_CLIENT_ID) {
+    missingRequiredEnv.push("SPOTIFY_CLIENT_ID");
+  }
+
+  if (!env.SPOTIFY_REFRESH_TOKEN) {
+    missingRequiredEnv.push("SPOTIFY_REFRESH_TOKEN");
+  }
+
+  if (!env.BLOB_READ_WRITE_TOKEN) {
+    missingRecommendedEnv.push("BLOB_READ_WRITE_TOKEN");
+  }
+
+  return {
+    configured: missingRequiredEnv.length === 0,
+    storage_persistent: Boolean(env.BLOB_READ_WRITE_TOKEN),
+    storage_mode: env.BLOB_READ_WRITE_TOKEN ? "vercel_blob" : "local_tmp",
+    missing_required_env: missingRequiredEnv,
+    missing_recommended_env: missingRecommendedEnv,
+  };
+}
+
 export function hasServerSpotifySyncConfig() {
-  return Boolean(
-    process.env.SPOTIFY_REFRESH_TOKEN &&
-      (process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID),
-  );
+  return getServerSyncConfigStatus().configured;
 }
 
 export function buildPlayKey(play) {
@@ -194,15 +346,20 @@ export function upsertPublicPlays(existingPayload = {}, incomingPlays = []) {
 
 export function buildPublicStatus(payload = {}, options = {}) {
   const plays = Array.isArray(payload.plays) ? payload.plays : [];
+  const config = options.config || getServerSyncConfigStatus();
 
   return {
-    configured: options.configured ?? true,
+    configured: options.configured ?? config.configured,
     last_synced_at: payload.last_sync_finished_at || null,
     last_sync_status: payload.last_sync_status || "idle",
+    last_sync_error: payload.last_sync_error || "",
     latest_played_at:
       payload.latest_played_at || plays[0]?.played_at || null,
     total_plays: plays.length,
     currently_playing: payload.currently_playing || null,
+    storage_persistent: config.storage_persistent,
+    missing_required_env: config.missing_required_env,
+    missing_recommended_env: config.missing_recommended_env,
   };
 }
 
@@ -335,12 +492,18 @@ export async function writePublicSyncPayload(payload) {
 
 async function fetchSpotifyAccessToken() {
   const refreshToken = process.env.SPOTIFY_REFRESH_TOKEN;
-  const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID;
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  const config = getServerSyncConfigStatus();
 
-  if (!refreshToken || !clientId) {
-    const error = new Error("Spotify server-side sync is not configured.");
-    error.code = "not_configured";
+  if (!config.configured) {
+    const missing = config.missing_required_env.join(", ");
+    const error = new Error(
+      `Spotify server-side sync is missing required Vercel env vars: ${missing}.`,
+    );
+    error.code = "missing_env";
+    error.missing_required_env = config.missing_required_env;
+    error.missing_recommended_env = config.missing_recommended_env;
     throw error;
   }
 
@@ -444,7 +607,7 @@ export async function runSpotifyListeningSync() {
       valid: merged.valid,
       inserted: merged.inserted,
       sync: buildPublicStatus(nextPayload, {
-        configured: hasServerSpotifySyncConfig(),
+        config: getServerSyncConfigStatus(),
       }),
       storage_mode: getPublicSyncStorageMode(),
     };
@@ -462,8 +625,13 @@ export async function runSpotifyListeningSync() {
       ok: false,
       error: error.message || "Spotify listening sync failed.",
       code: error.code || "error",
+      missing_required_env:
+        error.missing_required_env || getServerSyncConfigStatus().missing_required_env,
+      missing_recommended_env:
+        error.missing_recommended_env ||
+        getServerSyncConfigStatus().missing_recommended_env,
       sync: buildPublicStatus(nextPayload, {
-        configured: hasServerSpotifySyncConfig(),
+        config: getServerSyncConfigStatus(),
       }),
       storage_mode: getPublicSyncStorageMode(),
     };

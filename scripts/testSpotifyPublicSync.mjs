@@ -91,18 +91,29 @@ const status = buildPublicStatus({
     track_name: "Current Song",
     artist_name: "Current Artist",
   },
+}, {
+  config: {
+    configured: true,
+    storage_persistent: true,
+    missing_required_env: [],
+    missing_recommended_env: [],
+  },
 });
 
 assert.deepEqual(status, {
   configured: true,
   last_synced_at: "2026-06-22T12:00:00.000Z",
   last_sync_status: "success",
+  last_sync_error: "",
   latest_played_at: "2026-06-22T11:00:00.000Z",
   total_plays: 2,
   currently_playing: {
     track_name: "Current Song",
     artist_name: "Current Artist",
   },
+  storage_persistent: true,
+  missing_required_env: [],
+  missing_recommended_env: [],
 });
 
 const historyEntry = mapStoredPlayToHistoryEntry(firstPlay);

@@ -2,7 +2,7 @@ import {
   buildPublicStatus,
   getPublicPlays,
   getPublicSyncStorageMode,
-  hasServerSpotifySyncConfig,
+  getServerSyncConfigStatus,
   readPublicSyncPayload,
 } from "../lib/publicListeningSync.js";
 
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       plays: getPublicPlays(payload, limit),
       sync: buildPublicStatus(payload, {
-        configured: hasServerSpotifySyncConfig(),
+        config: getServerSyncConfigStatus(),
       }),
       storage_mode: getPublicSyncStorageMode(),
     });
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
           last_sync_status: "error",
         },
         {
-          configured: hasServerSpotifySyncConfig(),
+          config: getServerSyncConfigStatus(),
         },
       ),
       storage_mode: getPublicSyncStorageMode(),

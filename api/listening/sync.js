@@ -1,4 +1,7 @@
-import { runSpotifyListeningSync } from "../lib/publicListeningSync.js";
+import {
+  runSpotifyListeningSync,
+  verifyAdminSessionCookie,
+} from "../lib/publicListeningSync.js";
 
 function getHeader(req, name) {
   const lowerName = name.toLowerCase();
@@ -15,7 +18,9 @@ function isAuthorizedSyncRequest(req) {
   }
 
   if (req.method === "POST") {
-    return getHeader(req, "x-spotify-ai-admin-action") === "manual-sync";
+    return verifyAdminSessionCookie({
+      cookieHeader: getHeader(req, "cookie"),
+    }).ok;
   }
 
   return false;
@@ -34,7 +39,11 @@ export default async function handler(req, res) {
   }
 
   const result = await runSpotifyListeningSync();
-  const status = result.ok ? 200 : result.code === "not_configured" ? 503 : 502;
+  const status = result.ok
+    ? 200
+    : ["not_configured", "missing_env"].includes(result.code)
+      ? 503
+      : 502;
 
   res.setHeader("Cache-Control", "no-store");
   return res.status(status).json(result);

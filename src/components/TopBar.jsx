@@ -11,6 +11,7 @@ import {
   logoutAdmin,
 } from "../utils/adminAuth.js";
 import { hasSpotifyAccessToken } from "../utils/spotifySession.js";
+import { logoutAdminServerSession } from "../services/adminApi.js";
 
 function TopBar() {
   const navigate = useNavigate();
@@ -47,8 +48,13 @@ function TopBar() {
     };
   }, []);
 
-  const handleAdminLogout = () => {
+  const handleAdminLogout = async () => {
     logoutAdmin();
+    try {
+      await logoutAdminServerSession();
+    } catch (error) {
+      console.warn("Admin server logout failed:", error);
+    }
     setAdminUser(null);
   };
 

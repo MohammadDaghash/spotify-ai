@@ -15,7 +15,7 @@ import {
   getPreviousHistoryWindow,
 } from "../utils/rankMovement.js";
 import { hasSpotifyAccessToken } from "../utils/spotifySession.js";
-import { isAdmin } from "../utils/adminAuth.js";
+import { getAdminUser, isAdmin } from "../utils/adminAuth.js";
 import ListeningTrendChart from "../components/charts/ListeningTrendChart.jsx";
 import { getListeningTrend } from "../utils/spotifyDataParser.js";
 import { getMlDashboardAnalytics } from "../services/mlApi";
@@ -24,6 +24,7 @@ import {
   getPublicSyncedHistory,
   syncPublicListeningNow,
 } from "../services/publicListeningApi.js";
+import { loginAdminServerSession } from "../services/adminApi.js";
 
 const RANKING_IMAGE_CACHE_KEY = "spotify_ai_dashboard_ranking_images_v4";
 const MAX_CACHED_RANKING_IMAGES = 500;
@@ -126,6 +127,10 @@ function formatSyncTime(value) {
   if (Number.isNaN(date.getTime())) return "Not synced yet";
 
   return date.toLocaleString();
+}
+
+function formatEnvList(values = []) {
+  return values.length > 0 ? values.join(", ") : "";
 }
 
 function RankingImage({ row, onImageError }) {
@@ -627,6 +632,12 @@ function Dashboard() {
         error: "",
       });
 
+      const adminUser = getAdminUser();
+
+      if (adminUser?.email) {
+        await loginAdminServerSession(adminUser.email);
+      }
+
       const syncResult = await syncPublicListeningNow();
       const refreshedData = await loadPublicListeningData();
 
@@ -911,12 +922,20 @@ function Dashboard() {
                 <p className="text-xs text-gray-400 mt-1">
                   {publicSyncStatus?.configured
                     ? `${(publicSyncStatus.total_plays || 0).toLocaleString()} recent API plays stored server-side`
-                    : "Server-side Spotify sync is not configured yet; imported public history is still available."}
+                    : `Server-side Spotify sync is not configured yet${
+                        formatEnvList(publicSyncStatus?.missing_required_env)
+                          ? `; missing: ${formatEnvList(publicSyncStatus.missing_required_env)}`
+                          : ""
+                      }. Imported public history is still available.`}
                   {publicSyncStatus?.latest_played_at
                     ? ` • Latest play: ${formatSyncTime(publicSyncStatus.latest_played_at)}`
                     : ""}
                   {publicSyncStatus?.currently_playing?.track_name
                     ? ` • Now playing: ${publicSyncStatus.currently_playing.track_name} by ${publicSyncStatus.currently_playing.artist_name}`
+                    : ""}
+                  {publicSyncStatus?.configured &&
+                  publicSyncStatus?.missing_recommended_env?.length
+                    ? ` • Add ${formatEnvList(publicSyncStatus.missing_recommended_env)} for persistent Vercel storage`
                     : ""}
                 </p>
                 {publicSyncError && (
