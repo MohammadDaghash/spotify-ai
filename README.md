@@ -29,7 +29,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - Recommendation evaluation metrics
 - Spotify OAuth callback flow and Spotify Web API integration
 - Cached artwork/ranking lookups in the frontend
-- Trip playlist generation and survey-based preference inputs
+- Group Mix playlist generation and survey-based preference inputs
 - Public Spotify sync status with admin-gated manual sync
 
 ## Tech Stack
@@ -235,13 +235,13 @@ The production Vercel Cron is configured in `vercel.json`:
 ```json
 {
   "path": "/api/listening/sync",
-  "schedule": "*/30 * * * *"
+  "schedule": "0 3 * * *"
 }
 ```
 
 Vercel Cron calls that route as `GET /api/listening/sync` and must send `Authorization: Bearer <CRON_SECRET>`. The endpoint rejects scheduled sync requests if `CRON_SECRET` is missing or does not match.
 
-The 30-minute cadence reduces the chance of missing plays because Spotify's recently-played API only returns the latest batch of plays. Vercel Hobby cron only supports daily schedules; this schedule requires a Vercel plan that supports sub-daily cron intervals. If the project remains on Hobby, use daily cron or an external scheduler that calls `GET /api/listening/sync` every 30-60 minutes with the same `Authorization: Bearer <CRON_SECRET>` header.
+The current production cadence is daily at 03:00 UTC so it works on Vercel Hobby. Spotify's recently-played API only returns the latest batch of plays, so very active days can still miss some plays unless the admin uses **Sync now**. When the project upgrades to a Vercel plan that supports sub-daily cron, change the schedule back to `*/30 * * * *` or another 30-60 minute interval.
 
 The Spotify Web API recently-played endpoint only returns the latest recent plays, not full lifetime history. This project keeps imported/exported history as the historical base and merges newly synced recent API plays into the public dashboard. Sync is idempotent and deduplicates by `track_id + played_at`.
 

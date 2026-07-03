@@ -1,8 +1,11 @@
 import {
   demoArtistRecommendations,
-  demoGroupPlaylists,
   demoTrackRecommendations,
 } from "../data/demoRecommendations.js";
+import { allSpotifyHistory } from "../data/loadSpotifyHistory.js";
+import { getPublicSyncedHistory } from "./publicListeningApi.js";
+import { buildGroupMixPlaylists } from "../utils/groupMixEngine.js";
+import { dedupeHistoryEntries } from "../utils/publicListeningHistory.js";
 
 const ML_API_BASE_URL =
   import.meta.env.VITE_ML_API_URL ||
@@ -150,12 +153,34 @@ export async function getTrackRecommendations({
 export async function getTripPlaylists({
   limit = 25,
   newSongMaxPlays = 5,
+  groupMembers = [],
   surveyLikedArtists = [],
   surveyIgnoredArtists = [],
+  contextArtists = [],
+  hangoutType = "",
+  moods = [],
+  languages = [],
 } = {}) {
   if (!ML_API_BASE_URL) {
+    let syncedHistory = [];
+
+    try {
+      const syncedData = await getPublicSyncedHistory(500);
+      syncedHistory = syncedData.history || [];
+    } catch {
+      syncedHistory = [];
+    }
+
     return {
-      playlists: cloneDemoData(demoGroupPlaylists),
+      playlists: buildGroupMixPlaylists({
+        history: dedupeHistoryEntries([...allSpotifyHistory, ...syncedHistory]),
+        groupMembers,
+        surveyLikedArtists,
+        surveyIgnoredArtists,
+        contextArtists,
+        limit,
+        newSongMaxPlays,
+      }),
     };
   }
 
@@ -164,12 +189,28 @@ export async function getTripPlaylists({
     new_song_max_plays: newSongMaxPlays,
   });
 
+  if (hangoutType) {
+    params.set("hangout_type", hangoutType);
+  }
+
   surveyLikedArtists.forEach((artist) => {
     params.append("survey_liked_artists", artist);
   });
 
   surveyIgnoredArtists.forEach((artist) => {
     params.append("survey_ignored_artists", artist);
+  });
+
+  contextArtists.forEach((artist) => {
+    params.append("context_artists", artist);
+  });
+
+  moods.forEach((mood) => {
+    params.append("moods", mood);
+  });
+
+  languages.forEach((language) => {
+    params.append("languages", language);
   });
 
   const response = await fetch(

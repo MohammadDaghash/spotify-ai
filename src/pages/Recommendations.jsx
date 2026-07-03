@@ -20,6 +20,11 @@ import {
 } from "../services/mlApi.js";
 import { isAdmin } from "../utils/adminAuth.js";
 import { buildDynamicUserProfile } from "../utils/featureEngineering.js";
+import {
+  PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
+  readLocalSpotifyHistory,
+} from "../utils/localSpotifyHistory.js";
+import { rankPrivateTrackRecommendations } from "../utils/privateRecommendations.js";
 import { hasSpotifyAccessToken } from "../utils/spotifySession.js";
 import { addRankMovementToRows } from "../utils/rankMovement.js";
 import {
@@ -66,6 +71,9 @@ function Recommendations() {
   const [userTasteProfile, setUserTasteProfile] = useState(
     buildDynamicUserProfile(candidateTracks),
   );
+  const [localSpotifyHistory, setLocalSpotifyHistory] = useState(
+    readLocalSpotifyHistory,
+  );
 
   const [artistRecommendations, setArtistRecommendations] = useState([]);
   const [trackRecommendations, setTrackRecommendations] = useState([]);
@@ -103,6 +111,7 @@ function Recommendations() {
     ? recommendationSearchType
     : "";
   const isRecommendationSearchActive = Boolean(recommendationSearchQuery);
+  const isPrivateRecommendationMode = localSpotifyHistory.length > 0;
 
   const runAdminAction = (actionLabel, action) => {
     if (isAdmin()) {
@@ -214,6 +223,26 @@ function Recommendations() {
   };
 
   useEffect(() => {
+    const refreshPrivateHistory = () => {
+      setLocalSpotifyHistory(readLocalSpotifyHistory());
+    };
+
+    window.addEventListener(
+      PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
+      refreshPrivateHistory,
+    );
+    window.addEventListener("storage", refreshPrivateHistory);
+
+    return () => {
+      window.removeEventListener(
+        PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
+        refreshPrivateHistory,
+      );
+      window.removeEventListener("storage", refreshPrivateHistory);
+    };
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem("spotify_ai_liked_songs", JSON.stringify(likedSongs));
   }, [likedSongs]);
 
@@ -270,24 +299,31 @@ function Recommendations() {
           ),
         ];
 
-        const [
-          artistRecommendationsData,
-          trackRecommendationsData,
-          tripPlaylistsData,
-        ] =
+        const privateTrackRecommendations = isPrivateRecommendationMode
+          ? rankPrivateTrackRecommendations({
+              history: localSpotifyHistory,
+              candidateTracks,
+              topN: 30,
+            })
+          : null;
+
+        const [artistRecommendationsData, trackRecommendationsData, tripPlaylistsData] =
           await Promise.all([
             getArtistRecommendations({
               topN: 50,
             }),
-            getTrackRecommendations({
-              topN: 30,
-              maxPlayCount: maxRecommendedTrackPlays,
-              likedTracks: likedSongs,
-              ignoredTracks: ignoredSongs,
-            }),
+            privateTrackRecommendations
+              ? Promise.resolve({ recommendations: privateTrackRecommendations })
+              : getTrackRecommendations({
+                  topN: 30,
+                  maxPlayCount: maxRecommendedTrackPlays,
+                  likedTracks: likedSongs,
+                  ignoredTracks: ignoredSongs,
+                }),
             getTripPlaylists({
               limit: 25,
               newSongMaxPlays: 5,
+              groupMembers,
               surveyLikedArtists,
               surveyIgnoredArtists,
             }),
@@ -373,6 +409,8 @@ function Recommendations() {
     ignoredArtists,
     likedSongs,
     ignoredSongs,
+    isPrivateRecommendationMode,
+    localSpotifyHistory,
     maxRecommendedTrackPlays,
   ]);
 
@@ -668,6 +706,13 @@ function Recommendations() {
             {isRecommendationSearchActive && !hasRecommendationSearchResults && (
               <div className="mb-6 rounded-lg border border-white/10 bg-[#181818] p-6 text-sm text-gray-400">
                 No results found
+              </div>
+            )}
+
+            {isPrivateRecommendationMode && (
+              <div className="mb-6 rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+                Recommendations are using your private Spotify history stored
+                in this browser. Public demo data remains unchanged.
               </div>
             )}
 

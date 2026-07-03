@@ -20,7 +20,7 @@ const listeningCron = vercelConfig.crons?.find(
 );
 
 assert.ok(listeningCron);
-assert.equal(listeningCron.schedule, "*/30 * * * *");
+assert.equal(listeningCron.schedule, "0 3 * * *");
 
 function createMockResponse() {
   return {

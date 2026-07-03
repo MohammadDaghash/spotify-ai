@@ -30,83 +30,117 @@ function Model() {
               </h1>
 
               <p className="page-subtitle mt-3 max-w-4xl text-sm leading-relaxed md:text-base">
-                Mathematical explanation of the recommendation engine: feature
-                vectors, cosine similarity, hybrid scoring, and evaluation
+                Current model notes for the recommender: data sources, feature
+                engineering, feedback learning, group scoring, and evaluation
                 metrics.
               </p>
             </div>
 
             <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <ModelCard title="1. Feature Vector">
-                Each song is represented as a dynamic normalized vector:
-                weighted genres, weighted moods, popularity, and recency. The
-                vector dimensions are built from the available catalog instead
-                of being hard-coded.
+              <ModelCard title="1. Data Modes">
+                The public demo uses the owner listening history plus safe
+                server-side synced plays. A visitor can switch to private mode
+                with Spotify login or JSON import, and those private entries
+                stay in that browser session instead of overwriting public demo
+                data.
               </ModelCard>
 
-              <ModelCard title="2. Cosine Similarity">
-                The engine compares the user taste vector with each song vector
-                using cosine similarity. A score closer to 1 means the song is
-                more similar to the user’s listening profile.
+              <ModelCard title="2. Feature Tables">
+                The Python backend uses Pandas groupby features for artists and
+                tracks: streams, minutes, active days, skip rate, completion,
+                recent streams, recent minutes, listen strength, and last played
+                time.
+              </ModelCard>
+
+              <ModelCard title="3. Scaling & Similarity">
+                Numeric features are log-transformed where useful, scaled with
+                scikit-learn `StandardScaler`, and compared with cosine
+                similarity. This makes large stream counts useful without
+                letting them dominate every score.
                 <div className="mt-3 bg-black rounded p-3 font-mono text-xs">
                   similarity = dot(userVector, songVector) / (||userVector|| ×
                   ||songVector||)
                 </div>
               </ModelCard>
 
-              <ModelCard title="3. Hybrid Recommendation Score">
-                Final ranking combines multiple signals:
+              <ModelCard title="4. Hybrid Ranking Score">
+                The final recommendation score combines similarity with quality
+                signals:
                 <ul className="list-disc list-inside mt-3 space-y-1">
-                  <li>Vector similarity</li>
-                  <li>Artist affinity</li>
-                  <li>Genre and mood affinity</li>
-                  <li>Novelty and recency</li>
-                  <li>Popularity debiasing</li>
+                  <li>recent listen strength</li>
+                  <li>completion and skip-rate quality</li>
+                  <li>underplayed-song filtering</li>
+                  <li>known-track or known-artist penalty</li>
+                  <li>diversity reranking</li>
                 </ul>
               </ModelCard>
 
-              <ModelCard title="4. Feedback Learning">
-                When the user clicks “Add to Library”, the system updates the
-                taste profile by increasing artist, genre, and mood weights.
-                Recent and stronger interactions carry more weight than weak or
-                stale interactions.
+              <ModelCard title="5. Feedback Learning">
+                Like, ignore, save, and playlist actions are treated as training
+                signals. Today they adjust filtering and weighting immediately.
+                The next ML step is storing structured feedback events so a
+                logistic-regression baseline can learn the probability of a user
+                liking a future recommendation.
               </ModelCard>
 
-              <ModelCard title="5. Precision@K">
+              <ModelCard title="6. Group Mix Scoring">
+                Group Mix creates three playlist strategies from listening
+                history, survey likes/ignores, and hangout context:
+                shared favorites, bridge picks, and new discoveries. Survey
+                liked artists and context artists boost relevant tracks;
+                ignored artists are excluded.
+              </ModelCard>
+
+              <ModelCard title="7. Recency Weighting">
+                Recent behavior matters more than old behavior. The current
+                model gives extra weight to recent 7-day and 30-day streams, so
+                a song played heavily this week can outrank an older lifetime
+                favorite when the current context supports it.
+              </ModelCard>
+
+              <ModelCard title="8. Precision@K">
                 Measures how many of the top K recommendations were relevant.
                 <div className="mt-3 bg-black rounded p-3 font-mono text-xs">
                   Precision@K = relevant recommendations / K
                 </div>
               </ModelCard>
 
-              <ModelCard title="6. Hit@K">
+              <ModelCard title="9. Hit@K">
                 Measures whether at least one relevant recommendation appeared
                 in the top K results. This is useful when one strong
                 recommendation is enough to count as success.
               </ModelCard>
 
-              <ModelCard title="7. Catalog Coverage">
+              <ModelCard title="10. Catalog Coverage">
                 Measures how much of the available candidate catalog the system
                 is able to recommend. Higher coverage means the model is less
                 repetitive.
               </ModelCard>
 
-              <ModelCard title="8. Artist Diversity">
+              <ModelCard title="11. Artist Diversity">
                 Measures whether recommendations come from different artists
                 instead of repeating the same artist again and again.
               </ModelCard>
 
-              <ModelCard title="9. Recall & NDCG">
+              <ModelCard title="12. Recall & NDCG">
                 Recall@K checks how many relevant songs were recovered. NDCG
                 rewards the model for ranking relevant songs near the top,
                 making it better suited for recommendation quality than accuracy
                 alone.
               </ModelCard>
 
-              <ModelCard title="10. Reranking">
-                After scoring, the engine reranks results with diversity and
-                novelty constraints so the list does not over-repeat one artist
-                or only recommend globally popular songs.
+              <ModelCard title="13. Statistical Next Step">
+                The next rigorous step is measuring uncertainty: acceptance
+                rate, ignore rate, confidence intervals, and A/B comparisons
+                between scoring versions. That connects directly to probability
+                and statistics coursework.
+              </ModelCard>
+
+              <ModelCard title="14. ML Next Step">
+                The first supervised model should be simple and interpretable:
+                logistic regression on feedback labels. Positive labels come
+                from liked/saved/opened recommendations; negative labels come
+                from ignored recommendations.
               </ModelCard>
             </section>
           </div>

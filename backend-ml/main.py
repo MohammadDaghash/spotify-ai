@@ -186,9 +186,14 @@ def track_recommendations(
 def trip_playlists(
     limit: int = 25,
     new_song_max_plays: int = 5,
+    hangout_type: str = "",
+    moods: list[str] = Query(default=[]),
+    languages: list[str] = Query(default=[]),
+    context_artists: list[str] = Query(default=[]),
     survey_liked_artists: list[str] = Query(default=[]),
     survey_ignored_artists: list[str] = Query(default=[]),
 ):
+    _ = (hangout_type, moods, languages)
     df = load_combined_spotify_history(DATA_FILE)
 
     return {
@@ -198,6 +203,7 @@ def trip_playlists(
             new_song_max_plays=new_song_max_plays,
             survey_liked_artists=survey_liked_artists,
             survey_ignored_artists=survey_ignored_artists,
+            context_artists=context_artists,
         )
     }
 

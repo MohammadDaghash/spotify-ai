@@ -2,8 +2,12 @@ import { useMemo, useState } from "react";
 
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
+import AdminGateModal from "../components/AdminGateModal.jsx";
+import GroupPlaylistsSection from "../components/recommendations/GroupPlaylistsSection.jsx";
 import ArtistPreferenceSurvey from "../components/trip/ArtistPreferenceSurvey.jsx";
 import { useSpotifyContext } from "../context/useSpotifyContext.js";
+import { getTripPlaylists } from "../services/mlApi.js";
+import { isAdmin } from "../utils/adminAuth.js";
 
 const HANGOUT_TYPES = [
   "Apartment hangout",
@@ -393,8 +397,18 @@ function getMoodLabels(context = {}) {
   return context.mood ? [context.mood] : [];
 }
 
+function getUniqueMemberArtists(members, fieldName) {
+  return [
+    ...new Set(
+      members.flatMap((member) =>
+        Array.isArray(member?.[fieldName]) ? member[fieldName] : [],
+      ),
+    ),
+  ];
+}
+
 function Trip() {
-  const { playlists = [] } = useSpotifyContext();
+  const { playlists = [], createPrivatePlaylistFromTracks } = useSpotifyContext();
   const [groupName, setGroupName] = useState("Saturday hangout");
   const [hangoutType, setHangoutType] = useState("Apartment hangout");
   const [moods, setMoods] = useState(["Mixed"]);
@@ -403,6 +417,15 @@ function Trip() {
   const [surveyName, setSurveyName] = useState("");
   const [surveyMemberName, setSurveyMemberName] = useState("");
   const [members, setMembers] = useState(getStoredMembers);
+  const [groupPlaylists, setGroupPlaylists] = useState(null);
+  const [groupMixLoading, setGroupMixLoading] = useState(false);
+  const [groupMixError, setGroupMixError] = useState("");
+  const [creatingPlaylistKey, setCreatingPlaylistKey] = useState("");
+  const [adminGate, setAdminGate] = useState({
+    isOpen: false,
+    actionLabel: "",
+    action: null,
+  });
 
   const saveMembers = (nextMembers) => {
     setMembers(nextMembers);
@@ -417,6 +440,27 @@ function Trip() {
 
     return [...new Set([...languageArtists, ...moodArtists])];
   }, [languages, moods]);
+
+  const surveyLikedArtists = useMemo(
+    () => getUniqueMemberArtists(members, "likedArtists"),
+    [members],
+  );
+
+  const surveyIgnoredArtists = useMemo(
+    () => getUniqueMemberArtists(members, "ignoredArtists"),
+    [members],
+  );
+
+  const hasGroupPlaylistTracks = useMemo(
+    () =>
+      Boolean(
+        groupPlaylists &&
+          Object.values(groupPlaylists).some(
+            (playlist) => playlist?.tracks?.length > 0,
+          ),
+      ),
+    [groupPlaylists],
+  );
 
   const toggleMood = (selectedMood) => {
     setMoods((prev) => {
@@ -501,6 +545,100 @@ function Trip() {
 
   const removeMember = (memberId) => {
     saveMembers(members.filter((member) => member.id !== memberId));
+  };
+
+  const runAdminAction = (actionLabel, action) => {
+    if (isAdmin()) {
+      action();
+      return;
+    }
+
+    setAdminGate({
+      isOpen: true,
+      actionLabel,
+      action,
+    });
+  };
+
+  const closeAdminGate = () => {
+    setAdminGate({
+      isOpen: false,
+      actionLabel: "",
+      action: null,
+    });
+  };
+
+  const approveAdminGate = () => {
+    adminGate.action?.();
+    closeAdminGate();
+  };
+
+  const generateGroupPlaylists = async () => {
+    try {
+      setGroupMixLoading(true);
+      setGroupMixError("");
+
+      const data = await getTripPlaylists({
+        limit: 25,
+        newSongMaxPlays: 5,
+        groupMembers: members,
+        surveyLikedArtists,
+        surveyIgnoredArtists,
+        contextArtists: surveyArtistPool,
+        hangoutType,
+        moods,
+        languages,
+      });
+
+      setGroupPlaylists(data.playlists || null);
+    } catch (error) {
+      console.error(error);
+      setGroupMixError(
+        "Could not generate group playlists. Check the backend or try again.",
+      );
+    } finally {
+      setGroupMixLoading(false);
+    }
+  };
+
+  const createTripPlaylist = async (playlistKey, playlist) => {
+    const spotifyWindow = window.open("", "_blank", "noreferrer");
+
+    if (spotifyWindow) {
+      spotifyWindow.document.write(
+        "<p style='font-family: system-ui; padding: 24px;'>Creating Spotify playlist...</p>",
+      );
+    }
+
+    try {
+      setCreatingPlaylistKey(playlistKey);
+      setGroupMixError("");
+
+      const spotifyUrl = await createPrivatePlaylistFromTracks?.({
+        name: playlist.name,
+        description: playlist.description,
+        tracks: playlist.tracks,
+      });
+
+      if (spotifyUrl) {
+        if (spotifyWindow) {
+          spotifyWindow.location.href = spotifyUrl;
+        } else {
+          window.location.assign(spotifyUrl);
+        }
+      } else {
+        spotifyWindow?.close();
+        setGroupMixError(
+          "Spotify created the playlist but did not return a URL.",
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      spotifyWindow?.close();
+      setGroupMixError("Could not create Spotify playlist. Try logging in again.");
+    } finally {
+      setCreatingPlaylistKey("");
+    }
   };
 
   const surveyMembers = useMemo(
@@ -734,17 +872,47 @@ function Trip() {
             <section className="bg-[#181818] rounded-lg p-6">
               <h2 className="text-xl font-bold mb-2">Generate playlists</h2>
               <p className="text-sm text-gray-400 mb-4">
-                Current group playlists still use your backend data. The next
-                backend step is to merge these survey profiles into group
-                scoring.
+                Uses the listening base data, selected hangout context, and each
+                survey member's liked/ignored artists to build three playlist
+                strategies.
               </p>
               <button
                 type="button"
+                onClick={generateGroupPlaylists}
+                disabled={groupMixLoading}
                 className="bg-[#1db954] text-black text-sm font-semibold px-4 py-2 rounded-full"
               >
-                Ready for backend group scoring
+                {groupMixLoading ? "Generating..." : "Generate group playlists"}
               </button>
+
+              {groupMixError && (
+                <p className="text-sm text-red-400 mt-4">{groupMixError}</p>
+              )}
+
+              {groupPlaylists && !hasGroupPlaylistTracks && (
+                <p className="text-sm text-gray-400 mt-4">
+                  No playlist tracks matched this context yet. Add more survey
+                  answers or try a broader mood/language mix.
+                </p>
+              )}
             </section>
+
+            <GroupPlaylistsSection
+              createTripPlaylist={createTripPlaylist}
+              creatingPlaylistKey={creatingPlaylistKey}
+              displayedTripPlaylists={groupPlaylists}
+              hasDisplayedTripPlaylistTracks={hasGroupPlaylistTracks}
+              runAdminAction={runAdminAction}
+            />
+
+            <AdminGateModal
+              actionLabel={adminGate.actionLabel}
+              isOpen={adminGate.isOpen}
+              message="Admin login required for creating Spotify playlists from the public demo data."
+              onApproved={approveAdminGate}
+              onClose={closeAdminGate}
+              title="Admin login required"
+            />
           </div>
         </main>
       </div>

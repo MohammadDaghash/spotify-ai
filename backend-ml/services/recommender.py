@@ -420,12 +420,15 @@ def get_trip_playlists(
     new_song_max_plays: int = 5,
     survey_liked_artists: list[str] | None = None,
     survey_ignored_artists: list[str] | None = None,
+    context_artists: list[str] | None = None,
 ):
     track_features = build_track_features(df)
     survey_liked_artists = survey_liked_artists or []
     survey_ignored_artists = survey_ignored_artists or []
+    context_artists = context_artists or []
     survey_liked_artist_names = _normalize_name_set(survey_liked_artists)
     survey_ignored_artist_names = _normalize_name_set(survey_ignored_artists)
+    context_artist_names = _normalize_name_set(context_artists)
     track_features["survey_artist_boost"] = track_features["artist_name"].apply(
         lambda artist_name: int(
             _artist_credit_matches(artist_name, survey_liked_artist_names)
@@ -436,9 +439,13 @@ def get_trip_playlists(
             _artist_credit_matches(artist_name, survey_ignored_artist_names)
         )
     )
+    track_features["context_artist_boost"] = track_features["artist_name"].apply(
+        lambda artist_name: int(_artist_credit_matches(artist_name, context_artist_names))
+    )
     track_features["group_score"] = (
         track_features["group_score"]
         + track_features["survey_artist_boost"] * 25
+        + track_features["context_artist_boost"] * 12
         - track_features["survey_artist_penalty"] * 40
     )
     track_features = track_features[track_features["survey_artist_penalty"] == 0]

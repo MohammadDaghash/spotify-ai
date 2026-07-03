@@ -20,6 +20,8 @@
     "test:spotify-refresh-token-setup": "node scripts/testSpotifyRefreshTokenSetup.mjs",
     "test:topbar-search": "node scripts/testTopbarSearch.mjs",
     "test:artwork-ux": "node scripts/testArtworkUx.mjs",
+    "test:group-mix": "node scripts/testGroupMixEngine.mjs",
+    "test:private-recommendations": "node scripts/testPrivateRecommendations.mjs",
     "check:line-limits": "node scripts/checkLineLimits.mjs",
     "preview": "vite preview"
   },
