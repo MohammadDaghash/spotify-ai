@@ -86,8 +86,9 @@ Focus: predict whether a user will like a recommendation.
 
 Start simple:
 
-- label liked/saved/opened recommendations as positive
+- label liked/saved/playlist-created recommendations as positive
 - label ignored recommendations as negative
+- keep open-Spotify clicks as neutral interest signals until validation shows they predict likes
 - use logistic regression as the first interpretable baseline
 - compare against current heuristic scoring
 - keep train/test split by time to avoid leaking future behavior

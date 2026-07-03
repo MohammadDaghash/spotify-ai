@@ -139,8 +139,9 @@ function Model() {
               <ModelCard title="14. ML Next Step">
                 The first supervised model should be simple and interpretable:
                 logistic regression on feedback labels. Positive labels come
-                from liked/saved/opened recommendations; negative labels come
-                from ignored recommendations.
+                from liked, saved, and playlist-created recommendations;
+                negative labels come from ignored recommendations. Spotify-open
+                clicks are stored as neutral interest signals.
               </ModelCard>
             </section>
           </div>

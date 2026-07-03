@@ -21,6 +21,12 @@ import {
 import { isAdmin } from "../utils/adminAuth.js";
 import { buildDynamicUserProfile } from "../utils/featureEngineering.js";
 import {
+  FEEDBACK_EVENTS_CHANGED_EVENT,
+  getFeedbackEvents,
+  recordFeedbackEvent,
+  summarizeFeedbackEvents,
+} from "../utils/feedbackEvents.js";
+import {
   PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
   readLocalSpotifyHistory,
 } from "../utils/localSpotifyHistory.js";
@@ -68,6 +74,9 @@ function Recommendations() {
   const [savedSongs, setSavedSongs] = useState(() =>
     getStoredList("spotify_ai_saved_song_recommendations"),
   );
+  const [feedbackEvents, setFeedbackEvents] = useState(() =>
+    getFeedbackEvents(),
+  );
   const [userTasteProfile, setUserTasteProfile] = useState(
     buildDynamicUserProfile(candidateTracks),
   );
@@ -112,6 +121,31 @@ function Recommendations() {
     : "";
   const isRecommendationSearchActive = Boolean(recommendationSearchQuery);
   const isPrivateRecommendationMode = localSpotifyHistory.length > 0;
+  const getFeedbackMode = () => {
+    if (isPrivateRecommendationMode) return "private-user";
+    if (isAdmin()) return "admin-demo";
+
+    return "public-demo";
+  };
+
+  const recordRecommendationFeedback = (action, itemType, item, context = {}) => {
+    const event = recordFeedbackEvent({
+      action,
+      itemType,
+      item,
+      mode: getFeedbackMode(),
+      source: "recommendations",
+      context: {
+        route: "/recommendations",
+        searchQuery: recommendationSearchQuery,
+        ...context,
+      },
+    });
+
+    setFeedbackEvents(getFeedbackEvents());
+
+    return event;
+  };
 
   const runAdminAction = (actionLabel, action) => {
     if (isAdmin()) {
@@ -142,6 +176,11 @@ function Recommendations() {
   const applyTrackFeedback = (track, sentiment) => {
     const isLike = sentiment === "like";
     const delta = isLike ? 0.2 : -0.15;
+
+    recordRecommendationFeedback(sentiment, "song", track, {
+      maxPlayCount: maxRecommendedTrackPlays,
+      recommendationSource: track.source || "ml-api",
+    });
 
     if (isLike) {
       setLikedSongs((prev) => [...new Set([...prev, track.trackName])]);
@@ -179,6 +218,44 @@ function Recommendations() {
     });
   };
 
+  const saveSongRecommendation = (track) => {
+    recordRecommendationFeedback("save", "song", track, {
+      maxPlayCount: maxRecommendedTrackPlays,
+      recommendationSource: track.source || "ml-api",
+    });
+    setSavedSongs((prev) => [
+      ...new Set([
+        ...prev,
+        getTrackHistoryKey(track.trackName, track.artistName),
+      ]),
+    ]);
+  };
+
+  const applyArtistFeedback = (artist, sentiment) => {
+    recordRecommendationFeedback(sentiment, "artist", artist, {
+      recommendationSource: artist.source || "ml-api",
+    });
+
+    if (sentiment === "like") {
+      setLikedArtists((prev) => [...new Set([...prev, artist.artist])]);
+    } else {
+      setIgnoredArtists((prev) => [...new Set([...prev, artist.artist])]);
+    }
+  };
+
+  const saveArtistRecommendation = (artist) => {
+    recordRecommendationFeedback("save", "artist", artist, {
+      recommendationSource: artist.source || "ml-api",
+    });
+    setSavedArtists((prev) => [...new Set([...prev, artist.artist])]);
+  };
+
+  const recordOpenSpotify = (itemType, item) => {
+    recordRecommendationFeedback("open_spotify", itemType, item, {
+      recommendationSource: item.source || "spotify-search",
+    });
+  };
+
   const createTripPlaylist = async (playlistKey, playlist) => {
     const spotifyWindow = window.open("", "_blank", "noreferrer");
 
@@ -199,6 +276,11 @@ function Recommendations() {
       });
 
       if (spotifyUrl) {
+        recordRecommendationFeedback("create_playlist", "group_playlist", playlist, {
+          playlistKey,
+          trackCount: playlist.tracks.length,
+        });
+
         if (spotifyWindow) {
           spotifyWindow.location.href = spotifyUrl;
         } else {
@@ -239,6 +321,23 @@ function Recommendations() {
         refreshPrivateHistory,
       );
       window.removeEventListener("storage", refreshPrivateHistory);
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshFeedbackEvents = () => {
+      setFeedbackEvents(getFeedbackEvents());
+    };
+
+    window.addEventListener(FEEDBACK_EVENTS_CHANGED_EVENT, refreshFeedbackEvents);
+    window.addEventListener("storage", refreshFeedbackEvents);
+
+    return () => {
+      window.removeEventListener(
+        FEEDBACK_EVENTS_CHANGED_EVENT,
+        refreshFeedbackEvents,
+      );
+      window.removeEventListener("storage", refreshFeedbackEvents);
     };
   }, []);
 
@@ -608,8 +707,10 @@ function Recommendations() {
       likedArtists.length +
       ignoredArtists.length;
     const positiveFeedback = likedSongs.length + likedArtists.length;
+    const feedbackEventStats = summarizeFeedbackEvents(feedbackEvents);
 
     return {
+      feedbackEventStats,
       liveSignalCount,
       topBoostedArtists,
       topGenres,
@@ -619,6 +720,10 @@ function Recommendations() {
         totalFeedback === 0
           ? "0%"
           : `${Math.round((positiveFeedback / totalFeedback) * 100)}%`,
+      eventAcceptanceRate: `${Math.round(
+        feedbackEventStats.acceptanceRate * 100,
+      )}%`,
+      eventIgnoreRate: `${Math.round(feedbackEventStats.ignoreRate * 100)}%`,
     };
   }, [
     likedSongs,
@@ -627,6 +732,7 @@ function Recommendations() {
     ignoredArtists,
     liveKnownTrackSignals,
     effectiveUserTasteProfile,
+    feedbackEvents,
   ]);
 
   const displayedTripPlaylists = useMemo(
@@ -717,15 +823,15 @@ function Recommendations() {
             )}
 
             <RecommendedArtistsSection
+              applyArtistFeedback={applyArtistFeedback}
               artists={displayedArtistRecommendationsWithDisplayScores}
               isSearchActive={isRecommendationSearchActive}
               mlError={mlError}
               mlLoading={mlLoading}
+              onOpenSpotify={(artist) => recordOpenSpotify("artist", artist)}
               runAdminAction={runAdminAction}
+              saveArtistRecommendation={saveArtistRecommendation}
               savedArtists={savedArtists}
-              setIgnoredArtists={setIgnoredArtists}
-              setLikedArtists={setLikedArtists}
-              setSavedArtists={setSavedArtists}
             />
 
             <FeedbackAnalyticsSection
@@ -748,9 +854,10 @@ function Recommendations() {
             <RecommendedSongsSection
               applyTrackFeedback={applyTrackFeedback}
               isSearchActive={isRecommendationSearchActive}
+              onOpenSpotify={(track) => recordOpenSpotify("song", track)}
               runAdminAction={runAdminAction}
               savedSongs={savedSongs}
-              setSavedSongs={setSavedSongs}
+              saveSongRecommendation={saveSongRecommendation}
               songs={displayedSongRecommendationsWithDisplayScores}
             />
           </div>

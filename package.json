@@ -22,6 +22,7 @@
     "test:artwork-ux": "node scripts/testArtworkUx.mjs",
     "test:group-mix": "node scripts/testGroupMixEngine.mjs",
     "test:private-recommendations": "node scripts/testPrivateRecommendations.mjs",
+    "test:feedback-events": "node scripts/testFeedbackEvents.mjs",
     "check:line-limits": "node scripts/checkLineLimits.mjs",
     "preview": "vite preview"
   },

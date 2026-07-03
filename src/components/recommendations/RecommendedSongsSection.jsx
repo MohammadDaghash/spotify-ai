@@ -8,9 +8,10 @@ import ModelBreakdown from "./ModelBreakdown.jsx";
 function RecommendedSongsSection({
   applyTrackFeedback,
   isSearchActive,
+  onOpenSpotify,
   runAdminAction,
+  saveSongRecommendation,
   savedSongs,
-  setSavedSongs,
   songs,
 }) {
   return (
@@ -91,6 +92,7 @@ function RecommendedSongsSection({
                 href={getSpotifySearchUrl(`${rec.trackName} ${rec.artistName}`)}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => onOpenSpotify?.(rec)}
                 className="bg-[#1db954] text-black text-sm font-semibold px-3 py-1.5 rounded-full"
               >
                 Open Spotify
@@ -99,12 +101,7 @@ function RecommendedSongsSection({
               <button
                 onClick={() =>
                   runAdminAction(`save ${rec.trackName}`, () =>
-                    setSavedSongs((prev) => [
-                      ...new Set([
-                        ...prev,
-                        getTrackHistoryKey(rec.trackName, rec.artistName),
-                      ]),
-                    ]),
+                    saveSongRecommendation(rec),
                   )
                 }
                 disabled={savedSongs.includes(

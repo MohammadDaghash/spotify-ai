@@ -8,6 +8,7 @@ import ArtistPreferenceSurvey from "../components/trip/ArtistPreferenceSurvey.js
 import { useSpotifyContext } from "../context/useSpotifyContext.js";
 import { getTripPlaylists } from "../services/mlApi.js";
 import { isAdmin } from "../utils/adminAuth.js";
+import { recordFeedbackEvent } from "../utils/feedbackEvents.js";
 
 const HANGOUT_TYPES = [
   "Apartment hangout",
@@ -621,6 +622,23 @@ function Trip() {
       });
 
       if (spotifyUrl) {
+        recordFeedbackEvent({
+          action: "create_playlist",
+          itemType: "group_playlist",
+          item: playlist,
+          mode: isAdmin() ? "admin-demo" : "public-demo",
+          source: "group-mix",
+          context: {
+            route: "/group-mix",
+            groupName,
+            hangoutType,
+            moods,
+            languages,
+            playlistKey,
+            trackCount: playlist.tracks.length,
+          },
+        });
+
         if (spotifyWindow) {
           spotifyWindow.location.href = spotifyUrl;
         } else {

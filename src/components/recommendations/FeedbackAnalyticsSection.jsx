@@ -52,11 +52,16 @@ function FeedbackAnalyticsSection({
         <div className="flex items-center justify-between gap-4 mb-4">
           <h2 className="text-xl font-bold">Feedback analytics</h2>
           <p className="text-sm text-gray-400">
-            Acceptance rate: {feedbackAnalytics.acceptanceRate}
+            Event acceptance: {feedbackAnalytics.eventAcceptanceRate}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-5">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-5">
+          <StatCard
+            title="Feedback events"
+            value={feedbackAnalytics.feedbackEventStats.totalEvents}
+            subtitle="Structured ML training rows"
+          />
           <StatCard
             title="Liked songs"
             value={likedSongs.length}
@@ -81,6 +86,24 @@ function FeedbackAnalyticsSection({
             title="Live signals"
             value={feedbackAnalytics.liveSignalCount}
             subtitle="Saved, recent, and top Spotify tracks"
+          />
+        </div>
+
+        <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <StatCard
+            title="Positive labels"
+            value={feedbackAnalytics.feedbackEventStats.positiveEvents}
+            subtitle="Like, save, playlist created"
+          />
+          <StatCard
+            title="Negative labels"
+            value={feedbackAnalytics.feedbackEventStats.negativeEvents}
+            subtitle="Ignored recommendation events"
+          />
+          <StatCard
+            title="Ignore rate"
+            value={feedbackAnalytics.eventIgnoreRate}
+            subtitle="Negative labels / labelable events"
           />
         </div>
 

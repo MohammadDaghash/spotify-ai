@@ -5,15 +5,15 @@ import {
 import ModelBreakdown from "./ModelBreakdown.jsx";
 
 function RecommendedArtistsSection({
+  applyArtistFeedback,
   artists,
   isSearchActive,
   mlError,
   mlLoading,
+  onOpenSpotify,
   runAdminAction,
+  saveArtistRecommendation,
   savedArtists,
-  setIgnoredArtists,
-  setLikedArtists,
-  setSavedArtists,
 }) {
   return (
     <section className="bg-[#181818] rounded-lg p-6 mb-6">
@@ -98,6 +98,7 @@ function RecommendedArtistsSection({
                   href={getSpotifySearchUrl(artist.artist)}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={() => onOpenSpotify?.(artist)}
                   className="bg-[#1db954] text-black text-xs font-semibold px-3 py-1.5 rounded-full"
                 >
                   Open Spotify
@@ -106,9 +107,7 @@ function RecommendedArtistsSection({
                 <button
                   onClick={() =>
                     runAdminAction(`save ${artist.artist}`, () =>
-                      setSavedArtists((prev) => [
-                        ...new Set([...prev, artist.artist]),
-                      ]),
+                      saveArtistRecommendation(artist),
                     )
                   }
                   disabled={savedArtists.includes(artist.artist)}
@@ -120,9 +119,7 @@ function RecommendedArtistsSection({
                 <button
                   onClick={() =>
                     runAdminAction(`mark ${artist.artist} as liked`, () =>
-                      setLikedArtists((prev) => [
-                        ...new Set([...prev, artist.artist]),
-                      ]),
+                      applyArtistFeedback(artist, "like"),
                     )
                   }
                   className="bg-white text-black text-xs font-semibold px-3 py-1.5 rounded-full"
@@ -133,9 +130,7 @@ function RecommendedArtistsSection({
                 <button
                   onClick={() =>
                     runAdminAction(`ignore ${artist.artist}`, () =>
-                      setIgnoredArtists((prev) => [
-                        ...new Set([...prev, artist.artist]),
-                      ]),
+                      applyArtistFeedback(artist, "ignore"),
                     )
                   }
                   className="bg-[#2a2a2a] text-white text-xs px-3 py-1.5 rounded-full"

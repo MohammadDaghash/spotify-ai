@@ -10,6 +10,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - Builds artist and track recommendation lists using engineered listening-behavior features.
 - Uses live Spotify signals when authenticated, including saved tracks, recently played tracks, followed artists, and top tracks.
 - Lets users like/ignore recommendations and reranks future results around that feedback.
+- Stores recommendation feedback as structured local events for future ML training.
 - Shows score breakdowns, confidence, raw similarity, quality signals, and rank movement for transparency.
 - Supports public demo data when Spotify login or the ML backend is not configured.
 - Publishes the owner’s listening dashboard as a public portfolio demo while keeping OAuth secrets server-side.
@@ -24,6 +25,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - scikit-learn `StandardScaler`
 - Cosine similarity ranking
 - Feedback-aware artist/track reranking
+- Structured feedback event logging for likes, ignores, saves, opens, and playlist creation
 - Underplayed-track filtering
 - Skip-rate, listen-strength, recency, and completion signals
 - Recommendation evaluation metrics
@@ -75,6 +77,7 @@ Important modules:
 - `backend-ml/services/recommender.py` builds feature tables, user vectors, similarity scores, quality scores, and final ranked recommendations.
 - `backend-ml/services/listening_sync.py` stores recent live Spotify plays locally and merges them with exported history.
 - `src/services/mlApi.js` connects the React app to the ML backend and demo fallback data.
+- `src/utils/feedbackEvents.js` stores local structured recommendation events for later supervised-learning work.
 - `api/listening/*.js` syncs recent Spotify plays server-side for the public Vercel demo.
 - `api/lib/publicListeningSync.js` refreshes Spotify access server-side, deduplicates plays, and stores safe public play data.
 - `src/pages/Dashboard.jsx` renders analytics, rank movement, artwork lookup, and listening summaries.
