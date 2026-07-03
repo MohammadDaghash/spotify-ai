@@ -6,6 +6,7 @@ import AdminGateModal from "../components/AdminGateModal.jsx";
 import GroupPlaylistsSection from "../components/recommendations/GroupPlaylistsSection.jsx";
 import ArtistPreferenceSurvey from "../components/trip/ArtistPreferenceSurvey.jsx";
 import { useSpotifyContext } from "../context/useSpotifyContext.js";
+import { syncFeedbackEvent } from "../services/feedbackApi.js";
 import { getTripPlaylists } from "../services/mlApi.js";
 import { isAdmin } from "../utils/adminAuth.js";
 import { recordFeedbackEvent } from "../utils/feedbackEvents.js";
@@ -622,7 +623,7 @@ function Trip() {
       });
 
       if (spotifyUrl) {
-        recordFeedbackEvent({
+        const event = recordFeedbackEvent({
           action: "create_playlist",
           itemType: "group_playlist",
           item: playlist,
@@ -637,6 +638,10 @@ function Trip() {
             playlistKey,
             trackCount: playlist.tracks.length,
           },
+        });
+
+        void syncFeedbackEvent(event).catch((error) => {
+          console.warn("Feedback server sync failed", error);
         });
 
         if (spotifyWindow) {

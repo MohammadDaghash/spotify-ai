@@ -10,7 +10,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - Builds artist and track recommendation lists using engineered listening-behavior features.
 - Uses live Spotify signals when authenticated, including saved tracks, recently played tracks, followed artists, and top tracks.
 - Lets users like/ignore recommendations and reranks future results around that feedback.
-- Stores recommendation feedback as structured local events for future ML training.
+- Stores recommendation feedback as structured local and server-side events for future ML training.
 - Shows score breakdowns, confidence, raw similarity, quality signals, and rank movement for transparency.
 - Supports public demo data when Spotify login or the ML backend is not configured.
 - Publishes the owner’s listening dashboard as a public portfolio demo while keeping OAuth secrets server-side.
@@ -26,6 +26,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - Cosine similarity ranking
 - Feedback-aware artist/track reranking
 - Structured feedback event logging for likes, ignores, saves, opens, and playlist creation
+- Durable Vercel Blob feedback storage for safe recommendation-training signals
 - Underplayed-track filtering
 - Skip-rate, listen-strength, recency, and completion signals
 - Recommendation evaluation metrics
@@ -77,7 +78,8 @@ Important modules:
 - `backend-ml/services/recommender.py` builds feature tables, user vectors, similarity scores, quality scores, and final ranked recommendations.
 - `backend-ml/services/listening_sync.py` stores recent live Spotify plays locally and merges them with exported history.
 - `src/services/mlApi.js` connects the React app to the ML backend and demo fallback data.
-- `src/utils/feedbackEvents.js` stores local structured recommendation events for later supervised-learning work.
+- `src/utils/feedbackEvents.js` stores local structured recommendation events for immediate UI feedback.
+- `api/feedback/events.js` stores sanitized recommendation feedback events for later supervised-learning work.
 - `api/listening/*.js` syncs recent Spotify plays server-side for the public Vercel demo.
 - `api/lib/publicListeningSync.js` refreshes Spotify access server-side, deduplicates plays, and stores safe public play data.
 - `src/pages/Dashboard.jsx` renders analytics, rank movement, artwork lookup, and listening summaries.
@@ -258,6 +260,19 @@ GET  /api/listening/recent
 GET  /api/listening/sync   # Vercel Cron
 POST /api/listening/sync   # admin-gated UI action
 ```
+
+### Feedback Event Storage
+
+Recommendation actions also write sanitized feedback events to:
+
+```text
+POST /api/feedback/events
+GET  /api/feedback/events?limit=500
+```
+
+These events are future ML training signals. They include safe fields such as action, item type, item name, score, source, mode, and small context values. Token-like fields are stripped before storage.
+
+With `BLOB_READ_WRITE_TOKEN`, events persist in Vercel Blob. Without it, local development falls back to temporary local storage.
 
 ## ML Backend Endpoints
 

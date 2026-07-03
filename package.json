@@ -23,6 +23,9 @@
     "test:group-mix": "node scripts/testGroupMixEngine.mjs",
     "test:private-recommendations": "node scripts/testPrivateRecommendations.mjs",
     "test:feedback-events": "node scripts/testFeedbackEvents.mjs",
+    "test:server-feedback": "node scripts/testServerFeedbackStore.mjs",
+    "test:feedback-api": "node scripts/testFeedbackApi.mjs",
+    "test:feedback-api-client": "node scripts/testFeedbackApiClient.mjs",
     "check:line-limits": "node scripts/checkLineLimits.mjs",
     "preview": "vite preview"
   },
