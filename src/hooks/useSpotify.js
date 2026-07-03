@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import spotifyApi from "../services/spotifyApi";
 
 export default function useSpotify() {
@@ -7,7 +7,7 @@ export default function useSpotify() {
   const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const getUserProfile = async () => {
+  const getUserProfile = useCallback(async () => {
     try {
       const res = await spotifyApi.get("/me");
       setIsName(
@@ -20,19 +20,19 @@ export default function useSpotify() {
     } catch (err) {
       console.error("Failed to fetch user profile:", err);
     }
-  };
+  }, []);
 
-  const getTopTracks = async () => {
+  const getTopTracks = useCallback(async () => {
     const topTracksRes = await spotifyApi.get("/me/top/tracks?limit=10");
     setTracks(topTracksRes.data.items);
-  };
+  }, []);
 
-  const getUserPlayList = async () => {
+  const getUserPlayList = useCallback(async () => {
     const res = await spotifyApi.get("/me/playlists?limit=20");
     setPlaylists(res.data);
-  };
+  }, []);
 
-  const searchArtist= async (artistName)=>{
+  const searchArtist = useCallback(async (artistName) => {
     if(!artistName) return
 
     try {
@@ -45,29 +45,45 @@ export default function useSpotify() {
     } catch (error) {
       console.log(error)
     }
-  }
+  }, []);
 
-  const getArtist = async (id)=>{
+  const getArtist = useCallback(async (id) => {
     const res= await spotifyApi.get(`/artists/${id}`)
     return res
-  }
-  const getArtistAlbums = async (id) => {
+  }, []);
+  const getArtistAlbums = useCallback(async (id) => {
   const res = await spotifyApi.get(
     `/artists/${id}/albums?include_groups=album,single&limit=20`
   );
   return res.data.items;
-};
+}, []);
 
-const getFollowedArtists=async ()=>{
+const getFollowedArtists = useCallback(async () => {
   const res= await spotifyApi.get("/me/following?type=artist&limit=20")
   return res
-}
+}, []);
 
   useEffect(() => {
-    getUserProfile().finally(() => setLoading(false));
-    getTopTracks().finally(() => setLoading(false));
-    getUserPlayList().finally(() => setLoading(false));
-  }, []);
+    let isCurrent = true;
+
+    async function loadSpotifyData() {
+      await Promise.allSettled([
+        getUserProfile(),
+        getTopTracks(),
+        getUserPlayList(),
+      ]);
+
+      if (isCurrent) {
+        setLoading(false);
+      }
+    }
+
+    loadSpotifyData();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [getTopTracks, getUserPlayList, getUserProfile]);
 
   return { tracks, loading, isName, playlists,searchArtist ,getArtist,getArtistAlbums,getFollowedArtists};
 }

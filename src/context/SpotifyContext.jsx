@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -13,6 +11,7 @@ import {
   mapSpotifyPlaysToHistoryEntries,
   saveSpotifyApiHistory,
 } from "../utils/localSpotifyHistory.js";
+import { SpotifyContext } from "./spotifyContextValue.js";
 
 /**
  * SpotifyContext
@@ -21,7 +20,6 @@ import {
  * - Prevents repeated API calls from multiple components mounting
  */
 
-const SpotifyContext = createContext(null);
 const LISTENING_SYNC_INTERVAL_MS = 30_000;
 const MIN_CURRENT_PLAY_PROGRESS_MS = 30_000;
 const ALBUM_EDITION_PATTERN =
@@ -253,7 +251,7 @@ export function SpotifyProvider({ children }) {
 
   // ---- Base fetchers ----
 
-  const getUserProfile = async () => {
+  const getUserProfile = useCallback(async () => {
     const res = await spotifyApi.get("/me");
     setInitials(
       (res.data.display_name || "")
@@ -263,17 +261,17 @@ export function SpotifyProvider({ children }) {
         .map((word) => word[0].toUpperCase())
         .join(""),
     );
-  };
+  }, []);
 
-  const getTopTracks = async () => {
+  const getTopTracks = useCallback(async () => {
     const res = await spotifyApi.get("/me/top/tracks?limit=10");
     setTracks(res.data.items || []);
-  };
+  }, []);
 
-  const getUserPlaylists = async () => {
+  const getUserPlaylists = useCallback(async () => {
     const res = await spotifyApi.get("/me/playlists?limit=20");
     setPlaylists(res.data.items || []);
-  };
+  }, []);
 
   // ---- Helpers for pages/components ----
 
@@ -364,31 +362,31 @@ export function SpotifyProvider({ children }) {
     return null;
   }, []);
 
-  const getArtist = async (id) => {
+  const getArtist = useCallback(async (id) => {
     if (!id) return null;
     const res = await spotifyApi.get(`/artists/${id}`);
     return res.data;
-  };
+  }, []);
 
-  const getArtistAlbums = async (id) => {
+  const getArtistAlbums = useCallback(async (id) => {
     if (!id) return [];
     const res = await spotifyApi.get(
       `/artists/${id}/albums?include_groups=album,single&limit=20`,
     );
     return res.data.items || [];
-  };
+  }, []);
 
-  const getFollowedArtists = async () => {
+  const getFollowedArtists = useCallback(async () => {
     const res = await spotifyApi.get("/me/following?type=artist&limit=20");
     return res.data?.artists?.items || [];
-  };
+  }, []);
 
-  const getCurrentlyPlaying = async () => {
+  const getCurrentlyPlaying = useCallback(async () => {
     const res = await spotifyApi.get("/me/player/currently-playing");
     return res.data || null;
-  };
+  }, []);
 
-  const syncListeningHistory = async () => {
+  const syncListeningHistory = useCallback(async () => {
     const [recentlyPlayedResult, currentlyPlayingResult] = await Promise.allSettled([
       spotifyApi.get("/me/player/recently-played?limit=50"),
       getCurrentlyPlaying(),
@@ -459,9 +457,9 @@ export function SpotifyProvider({ children }) {
     setListeningSyncStatus(nextStatus);
 
     return nextStatus;
-  };
+  }, [getCurrentlyPlaying]);
 
-  const getLiveListeningSignals = async () => {
+  const getLiveListeningSignals = useCallback(async () => {
     const [recentlyPlayed, savedTracks, shortTermTop, mediumTermTop, longTermTop] =
       await Promise.allSettled([
         spotifyApi.get("/me/player/recently-played?limit=50"),
@@ -489,9 +487,9 @@ export function SpotifyProvider({ children }) {
       savedTracks: savedTrackList,
       topTracks: topTrackLists,
     };
-  };
+  }, []);
 
-  const createPrivatePlaylistFromTracks = async ({
+  const createPrivatePlaylistFromTracks = useCallback(async ({
     name,
     description,
     tracks: playlistTracks,
@@ -526,7 +524,7 @@ export function SpotifyProvider({ children }) {
     }
 
     return playlist.data?.external_urls?.spotify;
-  };
+  }, [searchTrack]);
 
   // ---- Initial fetch once per app session ----
   useEffect(() => {
@@ -594,7 +592,7 @@ export function SpotifyProvider({ children }) {
       cancelled = true;
       window.clearInterval(syncIntervalId);
     };
-  }, []);
+  }, [getTopTracks, getUserPlaylists, getUserProfile, syncListeningHistory]);
 
   const value = useMemo(
     () => ({
@@ -622,18 +620,29 @@ export function SpotifyProvider({ children }) {
       getLiveListeningSignals,
       createPrivatePlaylistFromTracks,
     }),
-    [initials, tracks, playlists, loading, listeningSyncStatus],
+    [
+      initials,
+      tracks,
+      playlists,
+      loading,
+      listeningSyncStatus,
+      getUserProfile,
+      getTopTracks,
+      getUserPlaylists,
+      syncListeningHistory,
+      searchArtist,
+      searchTrack,
+      searchAlbum,
+      getArtist,
+      getArtistAlbums,
+      getFollowedArtists,
+      getCurrentlyPlaying,
+      getLiveListeningSignals,
+      createPrivatePlaylistFromTracks,
+    ],
   );
 
   return (
     <SpotifyContext.Provider value={value}>{children}</SpotifyContext.Provider>
   );
-}
-
-export function useSpotifyContext() {
-  const ctx = useContext(SpotifyContext);
-  if (!ctx) {
-    throw new Error("useSpotifyContext must be used inside SpotifyProvider");
-  }
-  return ctx;
 }

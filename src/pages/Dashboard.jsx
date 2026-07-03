@@ -2,16 +2,19 @@
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import Header from "../components/layout/Header.jsx";
-import RankMovementBadge from "../components/RankMovementBadge.jsx";
 import AdminGateModal from "../components/AdminGateModal.jsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import StatCard from "../components/common/StatCard.jsx";
+import PrivateDataModeNotice from "../components/dashboard/PrivateDataModeNotice.jsx";
+import RankingTable from "../components/dashboard/RankingTable.jsx";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useSpotifyContext } from "../context/SpotifyContext.jsx";
+import { useSpotifyContext } from "../context/useSpotifyContext.js";
 import { allSpotifyHistory } from "../data/loadSpotifyHistory.js";
 import { parseSpotifyHistory } from "../utils/spotifyDataParser.js";
 import {
   PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
   readLocalSpotifyHistory,
+  returnToPublicDemoMode,
 } from "../utils/localSpotifyHistory.js";
 import { dedupeHistoryEntries } from "../utils/publicListeningHistory.js";
 import {
@@ -29,100 +32,13 @@ import {
   syncPublicListeningNow,
 } from "../services/publicListeningApi.js";
 import { loginAdminServerSession } from "../services/adminApi.js";
-import { normalizeTopbarSearchText } from "../utils/topbarSearch.js";
-
-const RANKING_IMAGE_CACHE_KEY = "spotify_ai_dashboard_ranking_images_v4";
-const MAX_CACHED_RANKING_IMAGES = 500;
-const IMAGE_LOOKUP_DELAY_MS = 250;
-const RANKING_IMAGE_TYPE_PRIORITY = {
-  track: 0,
-  artist: 1,
-  album: 2,
-};
-
-function getStoredRankingImages() {
-  if (typeof localStorage === "undefined") return {};
-
-  try {
-    return JSON.parse(localStorage.getItem(RANKING_IMAGE_CACHE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function storeRankingImages(images) {
-  if (typeof localStorage === "undefined") return;
-
-  const entries = Object.entries(images).slice(-MAX_CACHED_RANKING_IMAGES);
-  localStorage.setItem(
-    RANKING_IMAGE_CACHE_KEY,
-    JSON.stringify(Object.fromEntries(entries)),
-  );
-}
-
-function getBestSpotifyImage(images = []) {
-  if (!Array.isArray(images) || images.length === 0) return "";
-
-  const mediumImage = images.find(
-    (image) => image.width >= 120 && image.width <= 320,
-  );
-
-  return mediumImage?.url || images[images.length - 1]?.url || images[0]?.url || "";
-}
-
-function getRankingImageKey(type, ...parts) {
-  return [type, ...parts].map((part) => part || "").join("::").toLowerCase();
-}
-
-function getFallbackInitial(row) {
-  return (row.name || row.artistName || row.albumName || "?").trim().slice(0, 1);
-}
-
-function delay(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
-function getRetryAfterMs(error) {
-  const status = error?.response?.status;
-  const retryAfter = Number(error?.response?.headers?.["retry-after"]);
-
-  if (Number.isFinite(retryAfter) && retryAfter > 0) {
-    return retryAfter * 1000;
-  }
-
-  if (status === 429) {
-    return 5_000;
-  }
-
-  return 0;
-}
-
-function sortRowsForImageLoading(rows) {
-  return [...rows].sort((left, right) => {
-    const rankDiff = (left.rank || 999) - (right.rank || 999);
-
-    if (rankDiff !== 0) return rankDiff;
-
-    return (
-      (RANKING_IMAGE_TYPE_PRIORITY[left.imageType] ?? 99) -
-      (RANKING_IMAGE_TYPE_PRIORITY[right.imageType] ?? 99)
-    );
-  });
-}
-
-function StatCard({ title, value, subtitle }) {
-  return (
-    <div className="bg-[#181818] rounded-lg p-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-        {title}
-      </p>
-      <h3 className="mt-3 text-3xl font-bold">{value}</h3>
-      <p className="mt-2 text-xs text-gray-500">{subtitle}</p>
-    </div>
-  );
-}
+import { redirectToSpotifyLogin } from "../services/spotifyAuth.js";
+import { useDashboardRankingImages } from "../hooks/useDashboardRankingImages.js";
+import {
+  getRankingImageKey,
+  sortRowsForImageLoading,
+} from "../utils/dashboardImageUtils.js";
+import { rowMatchesDashboardSearch } from "../utils/dashboardSearch.js";
 
 function formatSyncTime(value) {
   if (!value) return "Not synced yet";
@@ -136,111 +52,6 @@ function formatSyncTime(value) {
 
 function formatEnvList(values = []) {
   return values.length > 0 ? values.join(", ") : "";
-}
-
-function rowMatchesDashboardSearch(row, query) {
-  const normalizedQuery = normalizeTopbarSearchText(query);
-
-  if (!normalizedQuery) return true;
-
-  const rowText = normalizeTopbarSearchText(
-    [
-      row.name,
-      row.trackName,
-      row.artistName,
-      row.albumName,
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
-
-  return normalizedQuery
-    .split(" ")
-    .filter(Boolean)
-    .every((token) => rowText.includes(token));
-}
-
-function RankingImage({ row, onImageError }) {
-  const isArtist = row.imageType === "artist";
-  const shapeClass = isArtist ? "rounded-full" : "rounded";
-
-  if (row.imageUrl) {
-    return (
-      <img
-        src={row.imageUrl}
-        alt={
-          row.name ||
-          row.artistName ||
-          row.albumName ||
-          "Ranking cover or artist image"
-        }
-        className={`artwork-frame h-12 w-12 object-cover bg-[#2a2a2a] ${shapeClass}`}
-        loading="lazy"
-        onError={() => onImageError?.(row.imageKey)}
-      />
-    );
-  }
-
-  return (
-    <div
-      className={`artwork-frame h-12 w-12 bg-[#2a2a2a] text-gray-300 flex items-center justify-center text-sm font-bold ${shapeClass}`}
-    >
-      {getFallbackInitial(row)}
-    </div>
-  );
-}
-
-function RankingTable({ title, rows, columns, onImageError }) {
-  return (
-    <div className="bg-[#181818] rounded-lg p-5">
-      <h2 className="mb-5 text-lg font-bold">{title}</h2>
-
-      <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
-        {rows.length > 0 ? (
-          rows.map((row, index) => (
-            <div
-              key={`${title}-${index}-${row.name || ""}-${row.artistName || ""}-${row.albumName || ""}`}
-              className="music-table-row grid grid-cols-[42px_48px_1fr_auto] gap-3 items-center border-b border-white/5 p-2"
-            >
-              <div>
-                <span className="block text-gray-400">#{row.rank || index + 1}</span>
-                <RankMovementBadge row={row} />
-              </div>
-
-              <RankingImage row={row} onImageError={onImageError} />
-
-              <div>
-                <p className="font-semibold">
-                  {row.name || row.trackName || row.albumName || row.artistName}
-                </p>
-
-                <p className="text-xs text-gray-400">
-                  {columns
-                    .map((col) => row[col])
-                    .filter(Boolean)
-                    .join(" • ")}
-                </p>
-              </div>
-
-              <div className="text-right">
-                <p className="font-bold text-white">
-                  {row.streams?.toLocaleString()} streams
-                </p>
-
-                <p className="text-xs text-gray-400">
-                  {Math.round(row.minutes || 0).toLocaleString()} min
-                </p>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-lg border border-white/10 bg-black/20 p-6 text-sm text-gray-400">
-            No results found
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function Dashboard() {
@@ -273,21 +84,11 @@ function Dashboard() {
     message: "",
     error: "",
   });
+  const [coverLoginError, setCoverLoginError] = useState("");
   const [adminGate, setAdminGate] = useState({
     isOpen: false,
     actionLabel: "",
   });
-  const [rankingImages, setRankingImages] = useState(getStoredRankingImages);
-  const [rankingImageStatus, setRankingImageStatus] = useState({
-    requested: 0,
-    loaded: 0,
-    failed: 0,
-    done: false,
-    rateLimited: false,
-    authError: false,
-  });
-  const [imageLoadVersion, setImageLoadVersion] = useState(0);
-  const rankingImagesRef = useRef(rankingImages);
   const syncedPlayCount = listeningSyncStatus?.total_plays || 0;
   const liveSyncVersion = listeningSyncStatus?.last_checked_at || "";
   const canLoadSpotifyArtwork = hasSpotifyAccessToken();
@@ -329,10 +130,6 @@ function Dashboard() {
       history: recentData.history || [],
     };
   }, []);
-
-  useEffect(() => {
-    rankingImagesRef.current = rankingImages;
-  }, [rankingImages]);
 
   useEffect(() => {
     let isCurrentRequest = true;
@@ -717,15 +514,19 @@ function Dashboard() {
     ],
   );
 
-  const rankingImageRequestKey = useMemo(() => {
-    return rankingImageRows
-      .map((row) => row.imageKey)
-      .join("|");
-  }, [rankingImageRows]);
-
-  const cachedRankingImageCount = useMemo(() => {
-    return rankingImageRows.filter((row) => rankingImages[row.imageKey]).length;
-  }, [rankingImageRows, rankingImages]);
+  const {
+    addImagesToRows,
+    cachedRankingImageCount,
+    rankingImageStatus,
+    removeBrokenRankingImage,
+    retryRankingImages,
+  } = useDashboardRankingImages({
+    canLoadSpotifyArtwork,
+    rankingImageRows,
+    searchAlbum,
+    searchArtist,
+    searchTrack,
+  });
 
   const coverImageStatusText = useMemo(() => {
     if (!canLoadSpotifyArtwork) {
@@ -766,21 +567,6 @@ function Dashboard() {
     rankingImageStatus.rateLimited,
     rankingImageStatus.requested,
   ]);
-
-  const retryRankingImages = () => {
-    setRankingImages({});
-    rankingImagesRef.current = {};
-    storeRankingImages({});
-    setRankingImageStatus({
-      requested: 0,
-      loaded: 0,
-      failed: 0,
-      done: false,
-      rateLimited: false,
-      authError: false,
-    });
-    setImageLoadVersion((version) => version + 1);
-  };
 
   const runManualSync = async () => {
     try {
@@ -836,188 +622,43 @@ function Dashboard() {
     });
   };
 
-  useEffect(() => {
-    if (!rankingImageRequestKey) return;
-
-    if (!canLoadSpotifyArtwork) {
-      setRankingImageStatus({
-        requested: 0,
-        loaded: 0,
-        failed: 0,
-        done: true,
-        rateLimited: false,
-        authError: false,
+  const connectSpotifyForCovers = async () => {
+    try {
+      setCoverLoginError("");
+      await redirectToSpotifyLogin({
+        authMode: "connect",
+        returnPath: `${location.pathname}${location.search}`,
       });
-      return;
-    }
-
-    let isCancelled = false;
-    const rows = rankingImageRows;
-
-    async function fetchRowImage(row) {
-      if (row.imageType === "artist") {
-        const artist = await searchArtist(row.name);
-        return getBestSpotifyImage(artist?.images);
-      }
-
-      if (row.imageType === "album") {
-        const album = await searchAlbum(row.name, row.artistName);
-        return getBestSpotifyImage(album?.images);
-      }
-
-      const track = await searchTrack(row.name, row.artistName);
-      const trackImage = getBestSpotifyImage(track?.album?.images);
-
-      if (trackImage || !row.albumName) {
-        return trackImage;
-      }
-
-      const album = await searchAlbum(row.albumName, row.artistName);
-      return getBestSpotifyImage(album?.images);
-    }
-
-    async function loadRankingImages() {
-      const missingRows = rows.filter(
-        (row) => !rankingImagesRef.current[row.imageKey],
+    } catch (error) {
+      setCoverLoginError(
+        error.message || "Spotify login is not configured correctly.",
       );
-
-      setRankingImageStatus({
-        requested: missingRows.length,
-        loaded: 0,
-        failed: 0,
-        done: missingRows.length === 0,
-        rateLimited: false,
-        authError: false,
-      });
-
-      for (const row of missingRows) {
-        if (isCancelled) return;
-
-        try {
-          let imageUrl = "";
-
-          try {
-            imageUrl = await fetchRowImage(row);
-          } catch (error) {
-            const retryAfterMs = getRetryAfterMs(error);
-
-            if (retryAfterMs > 0) {
-              setRankingImageStatus((status) => ({
-                ...status,
-                rateLimited: true,
-              }));
-              await delay(retryAfterMs);
-              if (isCancelled) return;
-              imageUrl = await fetchRowImage(row);
-            } else {
-              throw error;
-            }
-          }
-
-          if (imageUrl) {
-            setRankingImages((prev) => {
-              if (prev[row.imageKey]) {
-                return prev;
-              }
-
-              const mergedImages = {
-                ...prev,
-                [row.imageKey]: imageUrl,
-              };
-              storeRankingImages(mergedImages);
-              return mergedImages;
-            });
-            setRankingImageStatus((status) => ({
-              ...status,
-              loaded: status.loaded + 1,
-            }));
-          } else {
-            setRankingImageStatus((status) => ({
-              ...status,
-              failed: status.failed + 1,
-            }));
-          }
-
-          await delay(IMAGE_LOOKUP_DELAY_MS);
-        } catch (error) {
-          setRankingImageStatus((status) => ({
-            ...status,
-            failed: status.failed + 1,
-            authError:
-              status.authError ||
-              error?.response?.status === 401 ||
-              error?.response?.status === 403,
-            rateLimited: status.rateLimited || error?.response?.status === 429,
-          }));
-          console.warn("Could not load ranking image", row.name, error);
-        }
-      }
-
-      if (!isCancelled) {
-        setRankingImageStatus((status) => ({
-          ...status,
-          done: true,
-        }));
-      }
     }
+  };
 
-    loadRankingImages();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [
-    imageLoadVersion,
-    rankingImageRequestKey,
-    rankingImageRows,
-    searchAlbum,
-    searchArtist,
-    searchTrack,
-    canLoadSpotifyArtwork,
-  ]);
+  const returnDashboardToPublicDemo = () => {
+    returnToPublicDemoMode();
+    setLocalSpotifyHistory([]);
+    navigate("/dashboard", { replace: true });
+  };
 
   const dashboardTopTracksWithImages = useMemo(
-    () =>
-      visibleDashboardTopTracks.map((track) => ({
-        ...track,
-        imageUrl: rankingImages[track.imageKey],
-      })),
-    [visibleDashboardTopTracks, rankingImages],
+    () => addImagesToRows(visibleDashboardTopTracks),
+    [addImagesToRows, visibleDashboardTopTracks],
   );
 
   const dashboardTopArtistsWithImages = useMemo(
-    () =>
-      visibleDashboardTopArtists.map((artist) => ({
-        ...artist,
-        imageUrl: rankingImages[artist.imageKey],
-      })),
-    [visibleDashboardTopArtists, rankingImages],
+    () => addImagesToRows(visibleDashboardTopArtists),
+    [addImagesToRows, visibleDashboardTopArtists],
   );
 
   const dashboardTopAlbumsWithImages = useMemo(
-    () =>
-      visibleDashboardTopAlbums.map((album) => ({
-        ...album,
-        imageUrl: rankingImages[album.imageKey],
-      })),
-    [visibleDashboardTopAlbums, rankingImages],
+    () => addImagesToRows(visibleDashboardTopAlbums),
+    [addImagesToRows, visibleDashboardTopAlbums],
   );
 
   const clearDashboardSearch = () => {
     navigate("/dashboard");
-  };
-
-  const removeBrokenRankingImage = (imageKey) => {
-    if (!imageKey) return;
-
-    setRankingImages((prev) => {
-      if (!prev[imageKey]) return prev;
-
-      const nextImages = { ...prev };
-      delete nextImages[imageKey];
-      storeRankingImages(nextImages);
-      return nextImages;
-    });
   };
 
   return (
@@ -1133,6 +774,13 @@ function Dashboard() {
                 ? "Loading Spotify data…"
                 : `${historySourceLabel} analytics — ${timeRangeLabel}`}
             </div>
+
+            {isPrivateSpotifyHistory && (
+              <PrivateDataModeNotice
+                onBackToDemo={returnDashboardToPublicDemo}
+                onImportHistory={() => navigate("/login")}
+              />
+            )}
 
             {isDashboardSearchActive && (
               <div className="mb-4 flex flex-col gap-3 rounded-lg border border-sky-400/20 bg-sky-400/10 p-4 md:flex-row md:items-center md:justify-between">
@@ -1279,13 +927,19 @@ function Dashboard() {
                 </button>
               ) : (
                 <button
-                  onClick={() => navigate("/login")}
+                  onClick={connectSpotifyForCovers}
                   className="bg-[#1db954] hover:bg-[#1ed760] text-black text-sm font-bold px-4 py-2 rounded-full transition hover:scale-[1.02]"
                   title="Open the Spotify sign-in and data import flow"
                   type="button"
                 >
                   Sign in to load covers
                 </button>
+              )}
+
+              {coverLoginError && (
+                <p className="basis-full text-xs text-red-300">
+                  {coverLoginError}
+                </p>
               )}
             </div>
 

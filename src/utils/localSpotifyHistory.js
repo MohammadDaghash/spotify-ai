@@ -199,7 +199,10 @@ export function saveLocalSpotifyHistory(entries) {
   return normalizedEntries;
 }
 
-export function saveSpotifyApiHistory(entries, { merge = true } = {}) {
+export function saveSpotifyApiHistory(
+  entries,
+  { merge = true, activatePrivateMode = false } = {},
+) {
   if (typeof localStorage === "undefined") return [];
 
   const existingEntries = merge ? readSpotifyApiHistory() : [];
@@ -208,7 +211,9 @@ export function saveSpotifyApiHistory(entries, { merge = true } = {}) {
     ...entries,
   ]);
 
-  enablePrivateSpotifyDataMode();
+  if (activatePrivateMode) {
+    enablePrivateSpotifyDataMode();
+  }
 
   return normalizedEntries;
 }

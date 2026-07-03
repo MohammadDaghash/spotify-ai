@@ -235,22 +235,13 @@ The production Vercel Cron is configured in `vercel.json`:
 ```json
 {
   "path": "/api/listening/sync",
-  "schedule": "0 3 * * *"
+  "schedule": "*/30 * * * *"
 }
 ```
 
 Vercel Cron calls that route as `GET /api/listening/sync` and must send `Authorization: Bearer <CRON_SECRET>`. The endpoint rejects scheduled sync requests if `CRON_SECRET` is missing or does not match.
 
-The current Vercel Hobby account only allows daily cron jobs. If this project is upgraded to a Vercel plan that supports hourly cron, change the schedule to:
-
-```json
-{
-  "path": "/api/listening/sync",
-  "schedule": "0 * * * *"
-}
-```
-
-An external scheduler can also call `GET /api/listening/sync` every 30-60 minutes with the same `Authorization: Bearer <CRON_SECRET>` header.
+The 30-minute cadence reduces the chance of missing plays because Spotify's recently-played API only returns the latest batch of plays. Vercel Hobby cron only supports daily schedules; this schedule requires a Vercel plan that supports sub-daily cron intervals. If the project remains on Hobby, use daily cron or an external scheduler that calls `GET /api/listening/sync` every 30-60 minutes with the same `Authorization: Bearer <CRON_SECRET>` header.
 
 The Spotify Web API recently-played endpoint only returns the latest recent plays, not full lifetime history. This project keeps imported/exported history as the historical base and merges newly synced recent API plays into the public dashboard. Sync is idempotent and deduplicates by `track_id + played_at`.
 

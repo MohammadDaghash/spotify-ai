@@ -4,6 +4,7 @@ import {
   buildSpotifyAuthorizeUrl,
   getSpotifyCallbackErrorMessage,
   getSpotifyRedirectUri,
+  redirectToSpotifyLogin,
   SPOTIFY_SCOPES,
 } from "../src/services/spotifyAuth.js";
 import {
@@ -41,6 +42,10 @@ globalThis.localStorage = createStorage();
 globalThis.sessionStorage = createStorage();
 globalThis.window = {
   dispatchEvent() {},
+  location: {
+    href: "",
+    origin: "https://spotify-ai-sooty.vercel.app",
+  },
 };
 
 const authUrl = buildSpotifyAuthorizeUrl({
@@ -141,7 +146,12 @@ assert.deepEqual(spotifyHistory[0], {
   master_metadata_album_album_name: "Recent Album",
 });
 
+disablePrivateSpotifyDataMode();
 saveSpotifyApiHistory(spotifyHistory);
+assert.equal(isPrivateSpotifyDataMode(), false);
+assert.deepEqual(readLocalSpotifyHistory(), []);
+
+enablePrivateSpotifyDataMode();
 assert.equal(isPrivateSpotifyDataMode(), true);
 assert.equal(readLocalSpotifyHistory().length, 2);
 assert.ok(localStorage.getItem(SPOTIFY_API_HISTORY_KEY));
@@ -158,5 +168,18 @@ assert.equal(localStorage.getItem("spotify_access_token"), null);
 assert.equal(localStorage.getItem("spotify_refresh_token"), null);
 assert.equal(localStorage.getItem("spotify_token_expires_at"), null);
 assert.equal(localStorage.getItem(SPOTIFY_API_HISTORY_KEY), null);
+
+await redirectToSpotifyLogin({
+  authMode: "connect",
+  clientId: "client-id",
+  returnPath: "/dashboard?search=covers",
+});
+
+assert.equal(sessionStorage.getItem("spotify_auth_mode"), "connect");
+assert.equal(
+  sessionStorage.getItem("spotify_auth_return_path"),
+  "/dashboard?search=covers",
+);
+assert.match(window.location.href, /accounts\.spotify\.com\/authorize/);
 
 console.log("Spotify user data flow tests passed");

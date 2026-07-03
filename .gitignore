@@ -27,6 +27,9 @@ dist-ssr
 .env*
 !.env.example
 
+# Local course material. Keep uploaded study PDFs outside Git.
+*.pdf
+
 backend-ml/data/private/
 backend-ml/data/live/
 src/data/spotify-history/

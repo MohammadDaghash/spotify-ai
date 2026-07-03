@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const dashboardSource = readFileSync("src/pages/Dashboard.jsx", "utf8");
+const privateNoticeSource = readFileSync(
+  "src/components/dashboard/PrivateDataModeNotice.jsx",
+  "utf8",
+);
+const dashboardUxSource = `${dashboardSource}\n${privateNoticeSource}`;
 
 assert.match(
   dashboardSource,
@@ -29,8 +34,20 @@ assert.match(
 
 assert.match(
   dashboardSource,
-  /onClick=\{\(\) => navigate\("\/login"\)\}/,
-  "Sign-in cover button should navigate to the existing Use Your Data flow.",
+  /onClick=\{connectSpotifyForCovers\}/,
+  "Sign-in cover button should use the cover-specific Spotify connection flow.",
+);
+
+assert.match(
+  dashboardSource,
+  /authMode: "connect"/,
+  "Cover login should not automatically switch the dashboard to private data mode.",
+);
+
+assert.match(
+  dashboardUxSource,
+  /Back to public demo/,
+  "Private mode should provide an explicit way back to public demo data.",
 );
 
 assert.doesNotMatch(

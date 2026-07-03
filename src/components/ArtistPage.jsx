@@ -1,7 +1,7 @@
 // src/components/ArtistPage.jsx
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useSpotifyContext } from "../context/SpotifyContext.jsx";
+import { useSpotifyContext } from "../context/useSpotifyContext.js";
 import AlbumCard from "./AlbumCard.jsx";
 
 export default function ArtistPage() {

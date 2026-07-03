@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import ArtistPreferenceSurvey from "../components/trip/ArtistPreferenceSurvey.jsx";
-import { useSpotifyContext } from "../context/SpotifyContext.jsx";
+import { useSpotifyContext } from "../context/useSpotifyContext.js";
 
 const HANGOUT_TYPES = [
   "Apartment hangout",

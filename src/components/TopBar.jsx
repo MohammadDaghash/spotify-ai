@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AdminGateModal from "./AdminGateModal.jsx";
-import { useSpotifyContext } from "../context/SpotifyContext.jsx";
+import { useSpotifyContext } from "../context/useSpotifyContext.js";
 import {
   demoArtistRecommendations,
   demoGroupPlaylists,

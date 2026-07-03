@@ -38,7 +38,10 @@ function Login() {
   const handleLogin = async () => {
     try {
       setSpotifyLoginError("");
-      await redirectToSpotifyLogin();
+      await redirectToSpotifyLogin({
+        authMode: "private",
+        returnPath: "/dashboard",
+      });
     } catch (error) {
       setSpotifyLoginError(
         error.message ||

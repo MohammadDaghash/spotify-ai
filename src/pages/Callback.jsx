@@ -20,6 +20,17 @@ function Callback() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    function getSafeReturnPath(value) {
+      const fallback = "/dashboard";
+      const path = String(value || "").trim();
+
+      if (!path || !path.startsWith("/") || path.startsWith("//")) {
+        return fallback;
+      }
+
+      return path;
+    }
+
     function failLogin(message) {
       clearSpotifyTokens();
       sessionStorage.setItem("spotify_auth_error", message);
@@ -77,6 +88,10 @@ function Callback() {
         });
 
         const { access_token, expires_in, refresh_token } = res.data;
+        const authMode = sessionStorage.getItem("spotify_auth_mode") || "private";
+        const returnPath = getSafeReturnPath(
+          sessionStorage.getItem("spotify_auth_return_path"),
+        );
 
         if (!access_token) {
           failLogin(getSpotifyCallbackErrorMessage({ missing: "token" }));
@@ -93,13 +108,18 @@ function Callback() {
           localStorage.setItem("spotify_refresh_token", refresh_token);
         }
 
-        enablePrivateSpotifyDataMode();
+        if (authMode === "private") {
+          enablePrivateSpotifyDataMode();
+        }
+
         sessionStorage.removeItem("spotify_code_verifier");
         sessionStorage.removeItem("spotify_redirect_uri");
         sessionStorage.removeItem("spotify_auth_state");
+        sessionStorage.removeItem("spotify_auth_mode");
+        sessionStorage.removeItem("spotify_auth_return_path");
         sessionStorage.removeItem("spotify_auth_error");
 
-        navigate("/dashboard", { replace: true });
+        navigate(returnPath, { replace: true });
       } catch (err) {
         console.error("Token exchange failed", err);
         failLogin(getSpotifyCallbackErrorMessage({ tokenError: err }));

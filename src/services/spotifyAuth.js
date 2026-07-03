@@ -181,10 +181,14 @@ export function getSpotifyCallbackErrorMessage({
   return "Spotify login failed. Try again.";
 }
 
-export async function redirectToSpotifyLogin() {
+export async function redirectToSpotifyLogin({
+  authMode = "private",
+  clientId = CLIENT_ID,
+  returnPath = "/dashboard",
+} = {}) {
   const redirectUri = getSpotifyRedirectUri();
   const configError = getSpotifyAuthConfigError({
-    clientId: CLIENT_ID,
+    clientId,
     redirectUri,
   });
 
@@ -198,8 +202,10 @@ export async function redirectToSpotifyLogin() {
   sessionStorage.setItem("spotify_code_verifier", codeVerifier);
   sessionStorage.setItem("spotify_redirect_uri", redirectUri);
   sessionStorage.setItem("spotify_auth_state", state);
+  sessionStorage.setItem("spotify_auth_mode", authMode);
+  sessionStorage.setItem("spotify_auth_return_path", returnPath);
   const authorizeUrl = buildSpotifyAuthorizeUrl({
-    clientId: CLIENT_ID,
+    clientId,
     redirectUri,
     codeChallenge,
     state,
