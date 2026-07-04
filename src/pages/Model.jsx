@@ -1,6 +1,11 @@
 // src/pages/Model.jsx
+import { useEffect, useMemo, useState } from "react";
+
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
+import StatCard from "../components/common/StatCard.jsx";
+import { fetchServerFeedbackEvents } from "../services/feedbackApi.js";
+import { buildModelFeedbackSummary } from "../utils/modelFeedbackSummary.js";
 
 function ModelCard({ title, children }) {
   return (
@@ -11,7 +16,76 @@ function ModelCard({ title, children }) {
   );
 }
 
+function formatDateTime(value) {
+  if (!value) return "No events yet";
+
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
 function Model() {
+  const [feedbackDataset, setFeedbackDataset] = useState({
+    events: [],
+    status: {},
+    storageMode: "unknown",
+  });
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
+  const [feedbackError, setFeedbackError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadFeedbackDataset() {
+      try {
+        setFeedbackLoading(true);
+        setFeedbackError("");
+
+        const data = await fetchServerFeedbackEvents(100);
+
+        if (!isMounted) return;
+
+        setFeedbackDataset({
+          events: data.events || [],
+          status: data.status || {},
+          storageMode: data.storage_mode || "unknown",
+        });
+      } catch (error) {
+        if (!isMounted) return;
+
+        setFeedbackError(
+          error instanceof Error
+            ? error.message
+            : "Could not load server feedback.",
+        );
+      } finally {
+        if (isMounted) {
+          setFeedbackLoading(false);
+        }
+      }
+    }
+
+    loadFeedbackDataset();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const feedbackSummary = useMemo(
+    () =>
+      buildModelFeedbackSummary({
+        events: feedbackDataset.events,
+        status: feedbackDataset.status,
+      }),
+    [feedbackDataset],
+  );
+
   return (
     <div className="app-shell h-screen bg-black flex flex-col">
       <TopBar />
@@ -35,6 +109,135 @@ function Model() {
                 metrics.
               </p>
             </div>
+
+            <section className="bg-[#181818] rounded-lg p-6 mb-6">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#1db954]">
+                    Server feedback
+                  </p>
+                  <h2 className="text-2xl font-bold">
+                    Feedback training dataset
+                  </h2>
+                  <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-300">
+                    This is the durable event stream from Like, Ignore, Save,
+                    Open Spotify, and playlist creation actions. It is the
+                    dataset we will later use for logistic regression and
+                    evaluation.
+                  </p>
+                </div>
+
+                <div className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gray-300">
+                  storage mode: {feedbackDataset.storageMode}
+                </div>
+              </div>
+
+              {feedbackError ? (
+                <div className="mt-5 rounded-lg border border-red-400/30 bg-red-950/30 p-4 text-sm text-red-200">
+                  {feedbackError}
+                </div>
+              ) : null}
+
+              <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+                <StatCard
+                  title="Events"
+                  value={feedbackLoading ? "..." : feedbackSummary.totalEvents}
+                  subtitle="Stored training rows"
+                />
+                <StatCard
+                  title="Positive"
+                  value={feedbackLoading ? "..." : feedbackSummary.positiveLabels}
+                  subtitle="Like, save, playlist"
+                />
+                <StatCard
+                  title="Negative"
+                  value={feedbackLoading ? "..." : feedbackSummary.negativeLabels}
+                  subtitle="Ignored suggestions"
+                />
+                <StatCard
+                  title="Neutral"
+                  value={feedbackLoading ? "..." : feedbackSummary.neutralSignals}
+                  subtitle="Open Spotify signals"
+                />
+                <StatCard
+                  title="Accept rate"
+                  value={feedbackLoading ? "..." : feedbackSummary.acceptanceRate}
+                  subtitle="Positive / labelable"
+                />
+                <StatCard
+                  title="Ignore rate"
+                  value={feedbackLoading ? "..." : feedbackSummary.ignoreRate}
+                  subtitle="Negative / labelable"
+                />
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.4fr]">
+                <div className="rounded-lg border border-white/10 bg-black/30 p-4">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-gray-300">
+                    Dataset shape
+                  </h3>
+                  <div className="mt-4 space-y-3 text-sm text-gray-300">
+                    <p>Songs: {feedbackSummary.songEvents}</p>
+                    <p>Artists: {feedbackSummary.artistEvents}</p>
+                    <p>Group playlists: {feedbackSummary.groupPlaylistEvents}</p>
+                    <p>Latest event: {formatDateTime(feedbackSummary.latestEventAt)}</p>
+                    <p>Updated: {formatDateTime(feedbackSummary.updatedAt)}</p>
+                  </div>
+
+                  <div className="mt-5 space-y-2">
+                    {feedbackSummary.actionRows.length > 0 ? (
+                      feedbackSummary.actionRows.map((row) => (
+                        <div
+                          className="flex items-center justify-between rounded-md bg-white/5 px-3 py-2 text-sm"
+                          key={row.label}
+                        >
+                          <span className="text-gray-300">{row.label}</span>
+                          <span className="font-bold">{row.count}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        No server feedback events recorded yet.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-white/10 bg-black/30 p-4">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-gray-300">
+                    Recent training signals
+                  </h3>
+
+                  <div className="mt-4 space-y-3">
+                    {feedbackSummary.recentEvents.length > 0 ? (
+                      feedbackSummary.recentEvents.map((event) => (
+                        <div
+                          className="rounded-lg border border-white/10 bg-white/[0.03] p-3"
+                          key={event.id}
+                        >
+                          <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                            <p className="font-semibold">{event.description}</p>
+                            <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#1db954]">
+                              {event.actionLabel}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs text-gray-500">
+                            {event.itemType} | {event.source || "unknown source"} |{" "}
+                            {event.mode || "unknown mode"} |{" "}
+                            {formatDateTime(event.timestamp)}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        New recommendation actions will appear here after they
+                        sync to the server.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
 
             <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <ModelCard title="1. Data Modes">
@@ -78,9 +281,9 @@ function Model() {
               <ModelCard title="5. Feedback Learning">
                 Like, ignore, save, and playlist actions are treated as training
                 signals. Today they adjust filtering and weighting immediately.
-                The next ML step is storing structured feedback events so a
-                logistic-regression baseline can learn the probability of a user
-                liking a future recommendation.
+                Structured events are now stored server-side so a
+                logistic-regression baseline can later learn the probability of
+                a user liking a future recommendation.
               </ModelCard>
 
               <ModelCard title="6. Group Mix Scoring">
