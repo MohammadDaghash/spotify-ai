@@ -5,6 +5,7 @@ import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import StatCard from "../components/common/StatCard.jsx";
 import { fetchServerFeedbackEvents } from "../services/feedbackApi.js";
+import { trainFeedbackLogisticBaseline } from "../utils/feedbackLearningModel.js";
 import { buildModelFeedbackSummary } from "../utils/modelFeedbackSummary.js";
 
 function ModelCard({ title, children }) {
@@ -85,6 +86,12 @@ function Model() {
       }),
     [feedbackDataset],
   );
+  const feedbackBaseline = useMemo(
+    () => trainFeedbackLogisticBaseline(feedbackDataset.events),
+    [feedbackDataset.events],
+  );
+  const baselineStatusLabel =
+    feedbackBaseline.status === "trained" ? "Trained" : "Needs more labels";
 
   return (
     <div className="app-shell h-screen bg-black flex flex-col">
@@ -234,6 +241,119 @@ function Model() {
                         sync to the server.
                       </p>
                     )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-lg border border-white/10 bg-black/30 p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-gray-300">
+                      Logistic regression baseline
+                    </h3>
+                    <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">
+                      This uses feature scaling, the sigmoid probability
+                      function, log-loss, and gradient descent. It is a learning
+                      baseline only; recommendation ranking is unchanged until
+                      we collect enough feedback to validate it.
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] ${
+                      feedbackBaseline.status === "trained"
+                        ? "border-[#1db954]/40 bg-[#1db954]/10 text-[#1db954]"
+                        : "border-yellow-300/30 bg-yellow-950/30 text-yellow-200"
+                    }`}
+                  >
+                    {baselineStatusLabel}
+                  </span>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-5">
+                  <StatCard
+                    title="Training rows"
+                    value={feedbackLoading ? "..." : feedbackBaseline.trainingRows}
+                    subtitle="Positive + negative labels"
+                  />
+                  <StatCard
+                    title="Features"
+                    value={feedbackLoading ? "..." : feedbackBaseline.featureCount}
+                    subtitle="Scaled input columns"
+                  />
+                  <StatCard
+                    title="Accuracy"
+                    value={
+                      feedbackLoading || feedbackBaseline.accuracy === null
+                        ? "-"
+                        : `${Math.round(feedbackBaseline.accuracy * 100)}%`
+                    }
+                    subtitle="Training-set check"
+                  />
+                  <StatCard
+                    title="Log loss"
+                    value={
+                      feedbackLoading || feedbackBaseline.logLoss === null
+                        ? "-"
+                        : feedbackBaseline.logLoss
+                    }
+                    subtitle="Lower is better"
+                  />
+                  <StatCard
+                    title="Avg p(like)"
+                    value={
+                      feedbackLoading ||
+                      feedbackBaseline.averagePredictedLikeProbability === null
+                        ? "-"
+                        : `${Math.round(
+                            feedbackBaseline.averagePredictedLikeProbability * 100,
+                          )}%`
+                    }
+                    subtitle="Mean predicted probability"
+                  />
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.2fr]">
+                  <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+                    <p className="font-mono text-xs text-gray-300">
+                      {feedbackBaseline.formula}
+                    </p>
+                    <p className="mt-3 text-sm text-gray-400">
+                      {feedbackBaseline.status === "trained"
+                        ? "The coefficients below show which current feedback features push the model toward a higher or lower like probability."
+                        : feedbackBaseline.reason}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+                    <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                      Top coefficients
+                    </h4>
+                    <div className="mt-3 space-y-2">
+                      {feedbackBaseline.coefficients.length > 0 ? (
+                        feedbackBaseline.coefficients.slice(0, 5).map((row) => (
+                          <div
+                            className="flex items-center justify-between rounded-md bg-black/30 px-3 py-2 text-sm"
+                            key={row.feature}
+                          >
+                            <span className="text-gray-300">{row.feature}</span>
+                            <span
+                              className={
+                                row.direction === "positive"
+                                  ? "font-bold text-[#1db954]"
+                                  : "font-bold text-red-300"
+                              }
+                            >
+                              {row.weight}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          Coefficients will appear after the baseline has both
+                          positive and negative labels.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

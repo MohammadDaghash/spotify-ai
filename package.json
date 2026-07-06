@@ -28,6 +28,7 @@
     "test:feedback-api-client": "node scripts/testFeedbackApiClient.mjs",
     "test:model-feedback-summary": "node scripts/testModelFeedbackSummary.mjs",
     "test:model-page-feedback": "node scripts/testModelPageFeedback.mjs",
+    "test:feedback-learning-model": "node scripts/testFeedbackLearningModel.mjs",
     "check:line-limits": "node scripts/checkLineLimits.mjs",
     "preview": "vite preview"
   },

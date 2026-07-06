@@ -39,4 +39,28 @@ assert.match(
   "Model page should show the feedback storage mode.",
 );
 
+assert.match(
+  modelSource,
+  /trainFeedbackLogisticBaseline/,
+  "Model page should train the feedback logistic baseline from server events.",
+);
+
+assert.match(
+  modelSource,
+  /Logistic regression baseline/,
+  "Model page should show the supervised logistic regression baseline.",
+);
+
+assert.match(
+  modelSource,
+  /sigmoid/,
+  "Model page should explain the sigmoid probability formula.",
+);
+
+assert.match(
+  modelSource,
+  /gradient descent/,
+  "Model page should name the gradient descent training method.",
+);
+
 console.log("Model page feedback tests passed");
