@@ -1,6 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import {
+  getCurrentUser,
+  getUserAuthAvailability,
+  signInUser,
+  signOutUser,
+  signUpUser,
+  USER_SESSION_CHANGED_EVENT,
+} from "../services/userAuth.js";
 import {
   getSpotifyRedirectUri,
   redirectToSpotifyLogin,
@@ -33,7 +41,42 @@ function Login() {
   const [spotifyLoginError, setSpotifyLoginError] = useState(() =>
     readInitialSpotifyLoginError(location.search),
   );
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountStatus, setAccountStatus] = useState("");
+  const [accountError, setAccountError] = useState("");
+  const [accountUser, setAccountUser] = useState(null);
   const requiredRedirectUri = getSpotifyRedirectUri();
+  const accountAvailability = getUserAuthAvailability();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAccountUser() {
+      try {
+        const user = await getCurrentUser();
+
+        if (isMounted) {
+          setAccountUser(user);
+        }
+      } catch {
+        if (isMounted) {
+          setAccountUser(null);
+        }
+      }
+    }
+
+    loadAccountUser();
+
+    window.addEventListener(USER_SESSION_CHANGED_EVENT, loadAccountUser);
+    window.addEventListener("focus", loadAccountUser);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener(USER_SESSION_CHANGED_EVENT, loadAccountUser);
+      window.removeEventListener("focus", loadAccountUser);
+    };
+  }, []);
 
   const handleLogin = async () => {
     try {
@@ -82,6 +125,47 @@ function Login() {
   const handleBackToDemo = () => {
     returnToPublicDemoMode();
     navigate("/dashboard");
+  };
+
+  const handleAccountSubmit = async (mode) => {
+    try {
+      setAccountStatus("");
+      setAccountError("");
+
+      const action = mode === "signup" ? signUpUser : signInUser;
+      const result = await action({
+        email: accountEmail,
+        password: accountPassword,
+      });
+
+      if (!result.ok) {
+        throw new Error(result.error || "Account action failed.");
+      }
+
+      setAccountUser(result.user);
+      setAccountPassword("");
+      setAccountStatus(
+        result.needsEmailConfirmation
+          ? "Account created. Check your email to confirm your Supabase account."
+          : result.localFallback
+            ? "Local development account active in this browser."
+            : "Personal account is active. Future feedback can be stored privately for this user.",
+      );
+    } catch (error) {
+      setAccountError(error.message || "Could not update account session.");
+    }
+  };
+
+  const handleAccountLogout = async () => {
+    const result = await signOutUser();
+
+    if (result.ok) {
+      setAccountUser(null);
+      setAccountStatus("Personal account signed out.");
+      setAccountError("");
+    } else {
+      setAccountError(result.error || "Could not sign out.");
+    }
   };
 
   return (
@@ -134,6 +218,96 @@ function Login() {
             {requiredRedirectUri || "https://spotify-ai-sooty.vercel.app/callback"}
           </code>
         </div>
+
+        <section className="mt-6 rounded-lg border border-white/10 bg-[#181818] p-5">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#1db954]">
+                Personal account
+              </p>
+              <h2 className="text-xl font-bold">Sign in / sign up</h2>
+              <p className="mt-2 text-sm text-gray-400">
+                This separates your private recommendation feedback from the
+                public demo data. Spotify login still controls Spotify data
+                access.
+              </p>
+            </div>
+
+            <span className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-xs text-gray-300">
+              {accountAvailability.configured
+                ? "Supabase ready"
+                : accountAvailability.localFallback
+                  ? "Local dev mode"
+                  : "Supabase required"}
+            </span>
+          </div>
+
+          {accountUser ? (
+            <div className="mt-4 rounded-lg border border-[#1db954]/30 bg-[#1db954]/10 p-4">
+              <p className="text-sm font-semibold text-[#1db954]">
+                Signed in as {accountUser.email}
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Provider: {accountUser.provider}
+              </p>
+              <button
+                className="mt-4 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                onClick={handleAccountLogout}
+                type="button"
+              >
+                Sign out account
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto_auto]">
+              <input
+                aria-label="Account email"
+                className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white"
+                onChange={(event) => setAccountEmail(event.target.value)}
+                placeholder="Email"
+                type="email"
+                value={accountEmail}
+              />
+              <input
+                aria-label="Account password"
+                className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white"
+                onChange={(event) => setAccountPassword(event.target.value)}
+                placeholder="Password"
+                type="password"
+                value={accountPassword}
+              />
+              <button
+                className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black"
+                onClick={() => handleAccountSubmit("signin")}
+                type="button"
+              >
+                Sign in
+              </button>
+              <button
+                className="rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                onClick={() => handleAccountSubmit("signup")}
+                type="button"
+              >
+                Sign up
+              </button>
+            </div>
+          )}
+
+          {!accountAvailability.available && (
+            <p className="mt-4 rounded-lg border border-yellow-300/30 bg-yellow-950/30 p-3 text-sm text-yellow-100">
+              Supabase is not configured yet. Add VITE_SUPABASE_URL and
+              VITE_SUPABASE_ANON_KEY to enable real personal accounts.
+            </p>
+          )}
+
+          {accountStatus && (
+            <p className="mt-4 text-sm text-green-400">{accountStatus}</p>
+          )}
+
+          {accountError && (
+            <p className="mt-4 text-sm text-red-400">{accountError}</p>
+          )}
+        </section>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
           <section className="bg-[#181818] rounded-lg p-5 border border-white/10">

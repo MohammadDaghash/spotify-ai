@@ -8,6 +8,7 @@ import ArtistPreferenceSurvey from "../components/trip/ArtistPreferenceSurvey.js
 import { useSpotifyContext } from "../context/useSpotifyContext.js";
 import { syncFeedbackEvent } from "../services/feedbackApi.js";
 import { getTripPlaylists } from "../services/mlApi.js";
+import { syncUserFeedbackEvent } from "../services/userFeedbackApi.js";
 import { isAdmin } from "../utils/adminAuth.js";
 import { recordFeedbackEvent } from "../utils/feedbackEvents.js";
 
@@ -642,6 +643,9 @@ function Trip() {
 
         void syncFeedbackEvent(event).catch((error) => {
           console.warn("Feedback server sync failed", error);
+        });
+        void syncUserFeedbackEvent(event).catch((error) => {
+          console.warn("User feedback sync failed", error);
         });
 
         if (spotifyWindow) {

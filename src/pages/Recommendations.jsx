@@ -19,6 +19,7 @@ import {
   getTripPlaylists,
 } from "../services/mlApi.js";
 import { syncFeedbackEvent } from "../services/feedbackApi.js";
+import { syncUserFeedbackEvent } from "../services/userFeedbackApi.js";
 import { isAdmin } from "../utils/adminAuth.js";
 import { buildDynamicUserProfile } from "../utils/featureEngineering.js";
 import {
@@ -145,6 +146,9 @@ function Recommendations() {
 
     void syncFeedbackEvent(event).catch((error) => {
       console.warn("Feedback server sync failed", error);
+    });
+    void syncUserFeedbackEvent(event).catch((error) => {
+      console.warn("User feedback sync failed", error);
     });
     setFeedbackEvents(getFeedbackEvents());
 

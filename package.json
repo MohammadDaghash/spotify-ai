@@ -29,10 +29,14 @@
     "test:model-feedback-summary": "node scripts/testModelFeedbackSummary.mjs",
     "test:model-page-feedback": "node scripts/testModelPageFeedback.mjs",
     "test:feedback-learning-model": "node scripts/testFeedbackLearningModel.mjs",
+    "test:user-auth": "node scripts/testUserAuthService.mjs",
+    "test:user-feedback": "node scripts/testUserFeedbackApi.mjs",
+    "test:user-account-ui": "node scripts/testUserAccountUi.mjs",
     "check:line-limits": "node scripts/checkLineLimits.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.7",
     "@vercel/blob": "^2.4.1",
     "axios": "^1.13.2",
     "openai": "^6.15.0",

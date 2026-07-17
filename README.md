@@ -27,6 +27,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - Feedback-aware artist/track reranking
 - Structured feedback event logging for likes, ignores, saves, opens, and playlist creation
 - Durable Vercel Blob feedback storage for safe recommendation-training signals
+- Optional Supabase personal accounts for private per-user feedback storage
 - Underplayed-track filtering
 - Skip-rate, listen-strength, recency, and completion signals
 - Recommendation evaluation metrics
@@ -47,6 +48,7 @@ This project turns exported Spotify listening history and live Spotify Web API s
 - NumPy
 - scikit-learn
 - Spotify Web API
+- Supabase Auth and Postgres
 - Node.js / Express and OpenAI utility endpoint
 - Vercel configuration
 
@@ -79,6 +81,8 @@ Important modules:
 - `backend-ml/services/listening_sync.py` stores recent live Spotify plays locally and merges them with exported history.
 - `src/services/mlApi.js` connects the React app to the ML backend and demo fallback data.
 - `src/utils/feedbackEvents.js` stores local structured recommendation events for immediate UI feedback.
+- `src/services/userAuth.js` manages optional Supabase email/password accounts.
+- `src/services/userFeedbackApi.js` writes authenticated user feedback to Supabase.
 - `api/feedback/events.js` stores sanitized recommendation feedback events for later supervised-learning work.
 - `api/listening/*.js` syncs recent Spotify plays server-side for the public Vercel demo.
 - `api/lib/publicListeningSync.js` refreshes Spotify access server-side, deduplicates plays, and stores safe public play data.
@@ -273,6 +277,37 @@ GET  /api/feedback/events?limit=500
 These events are future ML training signals. They include safe fields such as action, item type, item name, score, source, mode, and small context values. Token-like fields are stripped before storage.
 
 With `BLOB_READ_WRITE_TOKEN`, events persist in Vercel Blob. Without it, local development falls back to temporary local storage.
+
+### Personal Accounts with Supabase
+
+Public demo browsing still works without login. Supabase is only needed when visitors should create personal accounts and store their own recommendation feedback privately.
+
+Add these frontend variables:
+
+```bash
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_or_publishable_key
+```
+
+Then run the schema in:
+
+```text
+docs/supabase-user-feedback.sql
+```
+
+The table uses Supabase Row Level Security:
+
+- authenticated users can read only their own feedback rows
+- authenticated users can insert only rows where `user_id = auth.uid()`
+- public demo feedback continues to use the existing sanitized Vercel Blob endpoint
+
+For local development without Supabase, you can set:
+
+```bash
+VITE_ENABLE_LOCAL_USER_AUTH=true
+```
+
+Do not enable local fallback auth in production. It is only for testing the UI without a Supabase project.
 
 ## ML Backend Endpoints
 
