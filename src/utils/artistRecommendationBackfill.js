@@ -99,15 +99,15 @@ export function buildCatalogArtistBackfills({ existingArtists = [] } = {}) {
   return catalogArtists
     .filter((artist) => !existingArtistNames.has(normalizeName(artist)))
     .map((artist, index) => {
-      const score = Math.max(0.42, 0.64 - index * 0.002);
+      const score = Math.max(0.18, 0.32 - index * 0.001);
 
       return {
         artist,
         score: Number(score.toFixed(3)),
-        similarity_score: Number(Math.max(0.4, score - 0.04).toFixed(3)),
-        raw_similarity_score: Number(Math.max(0.25, score - 0.18).toFixed(3)),
-        quality_score: Number(Math.max(0.48, score + 0.06).toFixed(3)),
-        confidence: Number(Math.max(0.45, score + 0.02).toFixed(3)),
+        similarity_score: Number(Math.max(0.18, score - 0.04).toFixed(3)),
+        raw_similarity_score: Number(Math.max(0.12, score - 0.12).toFixed(3)),
+        quality_score: Number(Math.max(0.24, score + 0.06).toFixed(3)),
+        confidence: Number(Math.max(0.28, score + 0.02).toFixed(3)),
         recency_score: 0.5,
         known_artist_penalty: 0,
         streams: 0,
