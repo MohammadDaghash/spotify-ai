@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { mergeArtistRecommendationBackfills } from "../src/utils/artistRecommendationBackfill.js";
 import { getVisibleArtistRecommendations } from "../src/utils/recommendationLists.js";
+import { buildArtistStreamCountMap } from "../src/utils/artistStreamCounts.js";
 
 const artistRecommendations = [
   { artist: "Artist A", score: 0.9 },
@@ -105,5 +106,30 @@ assert.ok(
     .slice(1)
     .every((artist) => artist.source === "catalog-backfill"),
 );
+
+const knownArtistStreamCounts = buildArtistStreamCountMap([
+  { master_metadata_album_artist_name: "Taylor Swift", streams: 100 },
+  { master_metadata_album_artist_name: "Billie Eilish", streams: 80 },
+  { master_metadata_album_artist_name: "Beyoncé", streams: 75 },
+]);
+
+const thresholdedCatalogPool = mergeArtistRecommendationBackfills({
+  artistRecommendations: [],
+  trackRecommendations: [],
+  knownArtistStreamCounts,
+  maxArtistStreams: 50,
+});
+
+const thresholdedVisibleArtists = getVisibleArtistRecommendations({
+  recommendations: thresholdedCatalogPool,
+  knownArtistStreamCounts,
+  maxArtistStreams: 50,
+  limit: 5,
+}).map((artist) => artist.artist);
+
+assert.equal(thresholdedVisibleArtists.length, 5);
+assert.ok(!thresholdedVisibleArtists.includes("Taylor Swift"));
+assert.ok(!thresholdedVisibleArtists.includes("Billie Eilish"));
+assert.ok(!thresholdedVisibleArtists.includes("Beyonce"));
 
 console.log("Artist recommendation backfill tests passed");

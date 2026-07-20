@@ -13,6 +13,7 @@ import RecommendedSongsSection from "../components/recommendations/RecommendedSo
 import { useSpotifyContext } from "../context/useSpotifyContext.js";
 
 import { candidateTracks } from "../data/demoMusicData.js";
+import { allSpotifyHistory } from "../data/loadSpotifyHistory.js";
 import {
   getArtistRecommendations,
   getTrackRecommendations,
@@ -45,6 +46,10 @@ import {
   getVisibleArtistRecommendations,
   getVisibleSongRecommendations,
 } from "../utils/recommendationLists.js";
+import {
+  ARTIST_DISCOVERY_MAX_STREAMS,
+  buildArtistStreamCountMap,
+} from "../utils/artistStreamCounts.js";
 import {
   addRelativeMatchScores,
   applyWeightDelta,
@@ -563,13 +568,23 @@ function Recommendations() {
     maxRecommendedTrackPlays,
   ]);
 
+  const artistDiscoveryStreamCounts = useMemo(
+    () =>
+      buildArtistStreamCountMap(
+        isPrivateRecommendationMode ? localSpotifyHistory : allSpotifyHistory,
+      ),
+    [isPrivateRecommendationMode, localSpotifyHistory],
+  );
+
   const artistRecommendationCandidatePool = useMemo(
     () =>
       mergeArtistRecommendationBackfills({
         artistRecommendations,
         trackRecommendations,
+        knownArtistStreamCounts: artistDiscoveryStreamCounts,
+        maxArtistStreams: ARTIST_DISCOVERY_MAX_STREAMS,
       }),
-    [artistRecommendations, trackRecommendations],
+    [artistDiscoveryStreamCounts, artistRecommendations, trackRecommendations],
   );
 
   const feedbackRankedArtistRecommendations = useMemo(
@@ -587,9 +602,12 @@ function Recommendations() {
       likedArtists: feedbackLikedArtists,
       ignoredArtists: feedbackIgnoredArtists,
       followedArtists,
+      knownArtistStreamCounts: artistDiscoveryStreamCounts,
+      maxArtistStreams: ARTIST_DISCOVERY_MAX_STREAMS,
       limit: visibleRecommendationCount,
     });
   }, [
+    artistDiscoveryStreamCounts,
     feedbackIgnoredArtists,
     feedbackLikedArtists,
     feedbackRankedArtistRecommendations,

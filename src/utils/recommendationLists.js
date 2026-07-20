@@ -1,3 +1,9 @@
+import {
+  ARTIST_DISCOVERY_MAX_STREAMS,
+  getArtistStreamCount,
+  normalizeArtistKey,
+} from "./artistStreamCounts.js";
+
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -23,18 +29,32 @@ export function getVisibleArtistRecommendations({
   likedArtists = [],
   ignoredArtists = [],
   followedArtists = [],
+  knownArtistStreamCounts = new Map(),
+  maxArtistStreams = ARTIST_DISCOVERY_MAX_STREAMS,
   limit = 5,
 } = {}) {
   const excludedArtistNames = new Set(
-    [...likedArtists, ...ignoredArtists].map(normalizeName),
+    [...likedArtists, ...ignoredArtists].map(normalizeArtistKey),
   );
   const followedArtistNames = new Set(
-    followedArtists.map((artist) => normalizeName(artist?.name)),
+    followedArtists.map((artist) => normalizeArtistKey(artist?.name)),
   );
 
-  return uniqueBy(recommendations, (artist) => normalizeName(artist?.artist))
-    .filter((artist) => !excludedArtistNames.has(normalizeName(artist.artist)))
-    .filter((artist) => !followedArtistNames.has(normalizeName(artist.artist)))
+  return uniqueBy(recommendations, (artist) => normalizeArtistKey(artist?.artist))
+    .filter(
+      (artist) => !excludedArtistNames.has(normalizeArtistKey(artist.artist)),
+    )
+    .filter(
+      (artist) => !followedArtistNames.has(normalizeArtistKey(artist.artist)),
+    )
+    .filter((artist) => {
+      const candidateStreams = Math.max(
+        Number(artist?.streams) || 0,
+        getArtistStreamCount(artist?.artist, knownArtistStreamCounts),
+      );
+
+      return candidateStreams < maxArtistStreams;
+    })
     .slice(0, limit);
 }
 

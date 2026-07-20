@@ -58,6 +58,19 @@ assert.deepEqual(
   ["A", "B", "D", "E", "F"],
 );
 
+assert.deepEqual(
+  getVisibleArtistRecommendations({
+    recommendations: largerArtistPool,
+    likedArtists: [],
+    ignoredArtists: [],
+    followedArtists: [],
+    knownArtistStreamCounts: new Map([["b", 50]]),
+    maxArtistStreams: 50,
+    limit: 5,
+  }).map((artist) => artist.artist),
+  ["A", "C", "D", "E", "F"],
+);
+
 const songPool = [
   { trackName: "A", artistName: "Artist 1", historyPlayCount: 1 },
   { trackName: "B", artistName: "Artist 2", historyPlayCount: 1 },

@@ -1,8 +1,9 @@
 import { ARTISTS_BY_LANGUAGE } from "../data/groupMixSurveyData.js";
-
-function normalizeName(value) {
-  return String(value || "").trim().toLowerCase();
-}
+import {
+  ARTIST_DISCOVERY_MAX_STREAMS,
+  getArtistStreamCount,
+  normalizeArtistKey,
+} from "./artistStreamCounts.js";
 
 function toFiniteNumber(value, fallback = 0) {
   const number = Number(value);
@@ -25,13 +26,13 @@ export function buildArtistRecommendationsFromTracks({
   existingArtists = [],
 } = {}) {
   const existingArtistNames = new Set(
-    existingArtists.map((artist) => normalizeName(artist?.artist)),
+    existingArtists.map((artist) => normalizeArtistKey(artist?.artist)),
   );
   const artistScores = new Map();
 
   for (const track of tracks || []) {
     const artist = getTrackArtistName(track);
-    const artistKey = normalizeName(artist);
+    const artistKey = normalizeArtistKey(artist);
 
     if (!artistKey || existingArtistNames.has(artistKey)) continue;
 
@@ -88,18 +89,27 @@ export function buildArtistRecommendationsFromTracks({
     .sort((a, b) => b.score - a.score);
 }
 
-export function buildCatalogArtistBackfills({ existingArtists = [] } = {}) {
+export function buildCatalogArtistBackfills({
+  existingArtists = [],
+  knownArtistStreamCounts = new Map(),
+  maxArtistStreams = ARTIST_DISCOVERY_MAX_STREAMS,
+} = {}) {
   const existingArtistNames = new Set(
-    existingArtists.map((artist) => normalizeName(artist?.artist)),
+    existingArtists.map((artist) => normalizeArtistKey(artist?.artist)),
   );
   const catalogArtists = [
     ...new Set(Object.values(ARTISTS_BY_LANGUAGE).flat().filter(Boolean)),
   ];
 
   return catalogArtists
-    .filter((artist) => !existingArtistNames.has(normalizeName(artist)))
+    .filter((artist) => !existingArtistNames.has(normalizeArtistKey(artist)))
+    .filter(
+      (artist) =>
+        getArtistStreamCount(artist, knownArtistStreamCounts) < maxArtistStreams,
+    )
     .map((artist, index) => {
       const score = Math.max(0.18, 0.32 - index * 0.001);
+      const streams = getArtistStreamCount(artist, knownArtistStreamCounts);
 
       return {
         artist,
@@ -110,7 +120,7 @@ export function buildCatalogArtistBackfills({ existingArtists = [] } = {}) {
         confidence: Number(Math.max(0.28, score + 0.02).toFixed(3)),
         recency_score: 0.5,
         known_artist_penalty: 0,
-        streams: 0,
+        streams,
         minutes: 0,
         skip_rate: 0,
         listen_strength: 0,
@@ -124,6 +134,8 @@ export function buildCatalogArtistBackfills({ existingArtists = [] } = {}) {
 export function mergeArtistRecommendationBackfills({
   artistRecommendations = [],
   trackRecommendations = [],
+  knownArtistStreamCounts = new Map(),
+  maxArtistStreams = ARTIST_DISCOVERY_MAX_STREAMS,
 } = {}) {
   const trackBackfills = buildArtistRecommendationsFromTracks({
     tracks: trackRecommendations,
@@ -131,6 +143,8 @@ export function mergeArtistRecommendationBackfills({
   });
   const catalogBackfills = buildCatalogArtistBackfills({
     existingArtists: [...artistRecommendations, ...trackBackfills],
+    knownArtistStreamCounts,
+    maxArtistStreams,
   });
 
   return [
