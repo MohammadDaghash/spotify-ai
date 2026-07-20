@@ -15,6 +15,7 @@
     "test:public-demo": "node scripts/testPublicDemoBugs.mjs",
     "test:public-listening-history": "node scripts/testPublicListeningHistory.mjs",
     "test:recommendation-replacement": "node scripts/testRecommendationReplacement.mjs",
+    "test:artist-recommendation-backfill": "node scripts/testArtistRecommendationBackfill.mjs",
     "test:spotify-sync-security": "node scripts/testSpotifySyncSecurity.mjs",
     "test:spotify-sync": "node scripts/testSpotifyPublicSync.mjs",
     "test:spotify-user-data": "node scripts/testSpotifyUserDataFlow.mjs",

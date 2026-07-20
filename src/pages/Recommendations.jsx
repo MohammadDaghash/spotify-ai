@@ -37,6 +37,7 @@ import {
   applyFeedbackPreferenceReranking,
   getFeedbackArtistPreferenceLists,
 } from "../utils/feedbackPreferenceSignals.js";
+import { mergeArtistRecommendationBackfills } from "../utils/artistRecommendationBackfill.js";
 import { rankPrivateTrackRecommendations } from "../utils/privateRecommendations.js";
 import { hasSpotifyAccessToken } from "../utils/spotifySession.js";
 import { addRankMovementToRows } from "../utils/rankMovement.js";
@@ -457,7 +458,7 @@ function Recommendations() {
         const [artistRecommendationsData, trackRecommendationsData, tripPlaylistsData] =
           await Promise.all([
             getArtistRecommendations({
-              topN: 50,
+              topN: 150,
             }),
             privateTrackRecommendations
               ? Promise.resolve({ recommendations: privateTrackRecommendations })
@@ -562,13 +563,22 @@ function Recommendations() {
     maxRecommendedTrackPlays,
   ]);
 
+  const artistRecommendationCandidatePool = useMemo(
+    () =>
+      mergeArtistRecommendationBackfills({
+        artistRecommendations,
+        trackRecommendations,
+      }),
+    [artistRecommendations, trackRecommendations],
+  );
+
   const feedbackRankedArtistRecommendations = useMemo(
     () =>
-      applyFeedbackPreferenceReranking(artistRecommendations, {
+      applyFeedbackPreferenceReranking(artistRecommendationCandidatePool, {
         signals: feedbackPreferenceSignals,
         itemType: "artist",
       }),
-    [artistRecommendations, feedbackPreferenceSignals],
+    [artistRecommendationCandidatePool, feedbackPreferenceSignals],
   );
 
   const filteredArtistRecommendations = useMemo(() => {
