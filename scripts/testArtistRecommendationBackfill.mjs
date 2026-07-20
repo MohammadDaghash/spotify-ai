@@ -67,7 +67,7 @@ const candidatePool = mergeArtistRecommendationBackfills({
   trackRecommendations,
 });
 
-assert.equal(candidatePool.length, 8);
+assert.ok(candidatePool.length > 8);
 
 const visibleArtists = getVisibleArtistRecommendations({
   recommendations: candidatePool,
@@ -84,5 +84,26 @@ assert.deepEqual(visibleArtists, [
   "Artist G",
   "Artist H",
 ]);
+
+const limitedTrackCandidatePool = mergeArtistRecommendationBackfills({
+  artistRecommendations,
+  trackRecommendations: trackRecommendations.slice(0, 1),
+});
+
+const visibleArtistsWithCatalogBackfill = getVisibleArtistRecommendations({
+  recommendations: limitedTrackCandidatePool,
+  likedArtists: ["Artist A", "Artist B", "Artist C"],
+  ignoredArtists: [],
+  followedArtists: [],
+  limit: 5,
+});
+
+assert.equal(visibleArtistsWithCatalogBackfill.length, 5);
+assert.equal(visibleArtistsWithCatalogBackfill[0].artist, "Artist D");
+assert.ok(
+  visibleArtistsWithCatalogBackfill
+    .slice(1)
+    .every((artist) => artist.source === "catalog-backfill"),
+);
 
 console.log("Artist recommendation backfill tests passed");

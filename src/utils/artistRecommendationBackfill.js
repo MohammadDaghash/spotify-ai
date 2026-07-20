@@ -1,3 +1,5 @@
+import { ARTISTS_BY_LANGUAGE } from "../data/groupMixSurveyData.js";
+
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -86,15 +88,54 @@ export function buildArtistRecommendationsFromTracks({
     .sort((a, b) => b.score - a.score);
 }
 
+export function buildCatalogArtistBackfills({ existingArtists = [] } = {}) {
+  const existingArtistNames = new Set(
+    existingArtists.map((artist) => normalizeName(artist?.artist)),
+  );
+  const catalogArtists = [
+    ...new Set(Object.values(ARTISTS_BY_LANGUAGE).flat().filter(Boolean)),
+  ];
+
+  return catalogArtists
+    .filter((artist) => !existingArtistNames.has(normalizeName(artist)))
+    .map((artist, index) => {
+      const score = Math.max(0.42, 0.64 - index * 0.002);
+
+      return {
+        artist,
+        score: Number(score.toFixed(3)),
+        similarity_score: Number(Math.max(0.4, score - 0.04).toFixed(3)),
+        raw_similarity_score: Number(Math.max(0.25, score - 0.18).toFixed(3)),
+        quality_score: Number(Math.max(0.48, score + 0.06).toFixed(3)),
+        confidence: Number(Math.max(0.45, score + 0.02).toFixed(3)),
+        recency_score: 0.5,
+        known_artist_penalty: 0,
+        streams: 0,
+        minutes: 0,
+        skip_rate: 0,
+        listen_strength: 0,
+        recent_listen_strength: 0,
+        reason: "Backup discovery candidate from the broader music catalog.",
+        source: "catalog-backfill",
+      };
+    });
+}
+
 export function mergeArtistRecommendationBackfills({
   artistRecommendations = [],
   trackRecommendations = [],
 } = {}) {
+  const trackBackfills = buildArtistRecommendationsFromTracks({
+    tracks: trackRecommendations,
+    existingArtists: artistRecommendations,
+  });
+  const catalogBackfills = buildCatalogArtistBackfills({
+    existingArtists: [...artistRecommendations, ...trackBackfills],
+  });
+
   return [
     ...artistRecommendations,
-    ...buildArtistRecommendationsFromTracks({
-      tracks: trackRecommendations,
-      existingArtists: artistRecommendations,
-    }),
+    ...trackBackfills,
+    ...catalogBackfills,
   ];
 }
