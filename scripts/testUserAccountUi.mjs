@@ -31,9 +31,29 @@ assert.match(
   "Recommendation feedback should sync to the authenticated user's private store.",
 );
 assert.match(
+  recommendationsSource,
+  /useActiveRecommendationFeedback/,
+  "Recommendations should read authenticated private feedback.",
+);
+assert.match(
+  recommendationsSource,
+  /applyFeedbackPreferenceReranking/,
+  "Recommendations should use private feedback to rerank candidates.",
+);
+assert.match(
   tripSource,
   /syncUserFeedbackEvent/,
   "Group Mix playlist feedback should sync to the authenticated user's private store.",
+);
+assert.match(
+  tripSource,
+  /useActiveRecommendationFeedback/,
+  "Group Mix should read authenticated private feedback.",
+);
+assert.match(
+  tripSource,
+  /getFeedbackArtistPreferenceLists/,
+  "Group Mix should turn private feedback into liked and ignored artist inputs.",
 );
 
 console.log("User account UI tests passed");

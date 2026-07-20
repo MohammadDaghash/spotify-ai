@@ -32,6 +32,7 @@ dist-ssr
 
 backend-ml/data/private/
 backend-ml/data/live/
+backend-ml/data/feedback/
 src/data/spotify-history/
 __pycache__/
 *.pyc

@@ -11,6 +11,18 @@ assert.match(
 
 assert.match(
   modelSource,
+  /fetchUserFeedbackEvents/,
+  "Model page should fetch private Supabase user feedback events.",
+);
+
+assert.match(
+  modelSource,
+  /USER_SESSION_CHANGED_EVENT/,
+  "Model page should refresh feedback when the personal user session changes.",
+);
+
+assert.match(
+  modelSource,
   /buildModelFeedbackSummary/,
   "Model page should use the shared feedback summary utility.",
 );
@@ -35,14 +47,32 @@ assert.match(
 
 assert.match(
   modelSource,
-  /storage mode/i,
-  "Model page should show the feedback storage mode.",
+  /Public demo feedback/,
+  "Model page should show the public demo feedback source.",
+);
+
+assert.match(
+  modelSource,
+  /Private user feedback/,
+  "Model page should show the private user feedback source.",
+);
+
+assert.match(
+  modelSource,
+  /Baseline training source/,
+  "Model page should explain which feedback source trains the baseline.",
+);
+
+assert.match(
+  modelSource,
+  /active source/i,
+  "Model page should show the active feedback source.",
 );
 
 assert.match(
   modelSource,
   /trainFeedbackLogisticBaseline/,
-  "Model page should train the feedback logistic baseline from server events.",
+  "Model page should train the feedback logistic baseline from the active feedback source.",
 );
 
 assert.match(

@@ -76,6 +76,15 @@ function RecommendedArtistsSection({
                     value: artist.known_artist_penalty,
                     tone: "red",
                   },
+                  ...(artist.feedbackScoreDelta
+                    ? [
+                        {
+                          label: "Feedback",
+                          value: artist.feedbackScoreDelta,
+                          tone: artist.feedbackScoreDelta < 0 ? "red" : "green",
+                        },
+                      ]
+                    : []),
                 ]}
               />
 

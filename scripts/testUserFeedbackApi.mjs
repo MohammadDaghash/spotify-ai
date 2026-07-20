@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  fetchUserFeedbackEvents,
   mapFeedbackEventToUserRow,
   syncUserFeedbackEvent,
 } from "../src/services/userFeedbackApi.js";
@@ -106,5 +107,61 @@ const localUserResult = await syncUserFeedbackEvent(event, {
 
 assert.equal(localUserResult.ok, false);
 assert.equal(localUserResult.skipped, "missing_supabase_user");
+
+const fetchedRows = [
+  {
+    id: "evt_private_1",
+    user_id: "user-id",
+    event_timestamp: "2026-07-17T10:00:00.000Z",
+    action: "like",
+    label: "positive",
+    item_type: "song",
+    item_name: "Private Song",
+  },
+];
+const fakeReadClient = {
+  from(tableName) {
+    assert.equal(tableName, "user_feedback_events");
+
+    return {
+      select(columns) {
+        assert.equal(columns, "*");
+
+        return {
+          eq(column, value) {
+            assert.equal(column, "user_id");
+            assert.equal(value, "user-id");
+
+            return {
+              order(column, options) {
+                assert.equal(column, "event_timestamp");
+                assert.deepEqual(options, { ascending: false });
+
+                return {
+                  limit(limit) {
+                    assert.equal(limit, 500);
+
+                    return Promise.resolve({
+                      data: fetchedRows,
+                      error: null,
+                    });
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+  },
+};
+
+const fetchResult = await fetchUserFeedbackEvents({
+  user,
+  supabaseClient: fakeReadClient,
+});
+
+assert.equal(fetchResult.ok, true);
+assert.deepEqual(fetchResult.events, fetchedRows);
 
 console.log("User feedback API tests passed");

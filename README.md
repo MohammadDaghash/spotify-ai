@@ -128,6 +128,51 @@ Optional frontend environment variable:
 VITE_ML_API_URL=http://127.0.0.1:8001
 ```
 
+### Python ML Experiments
+
+Run the first supervised-learning math lab with listening-behavior proxy labels:
+
+```bash
+cd backend-ml
+source venv/bin/activate
+python experiments/feedback_logistic_regression.py
+```
+
+This experiment uses Spotify listening behavior to create temporary proxy
+feedback labels, then trains logistic regression from scratch with NumPy:
+
+```text
+X = feature matrix
+y = feedback label vector
+z = X @ w + b
+p(like) = sigmoid(z)
+cost = binary cross-entropy + L2 regularization
+```
+
+It prints feature-scaling parameters, gradient-descent cost checkpoints,
+manual NumPy accuracy/log-loss, a scikit-learn comparison, and learned
+coefficients. When enough real Supabase Like/Ignore events exist, this same
+experiment can switch from proxy labels to real feedback labels:
+
+```bash
+npm run export:feedback-python
+
+cd backend-ml
+source venv/bin/activate
+python experiments/feedback_logistic_regression.py \
+  --label-source feedback \
+  --feedback-path data/feedback/events.json
+```
+
+`data/feedback/events.json` can be either:
+
+- the JSON response exported by `npm run export:feedback-python`
+- an exported Supabase `user_feedback_events` JSON/CSV file
+
+The real-feedback mode is intentionally strict: it needs both positive and
+negative labels before training, so it will ask for more Like/Ignore examples
+instead of silently falling back to proxy labels.
+
 ### Spotify Login
 
 Public demo pages do not require Spotify login. Spotify login is needed for live Spotify data, artwork/search helpers, and private playlist creation.

@@ -6,379 +6,21 @@ import AdminGateModal from "../components/AdminGateModal.jsx";
 import GroupPlaylistsSection from "../components/recommendations/GroupPlaylistsSection.jsx";
 import ArtistPreferenceSurvey from "../components/trip/ArtistPreferenceSurvey.jsx";
 import { useSpotifyContext } from "../context/useSpotifyContext.js";
+import { useActiveRecommendationFeedback } from "../hooks/useActiveRecommendationFeedback.js";
 import { syncFeedbackEvent } from "../services/feedbackApi.js";
 import { getTripPlaylists } from "../services/mlApi.js";
 import { syncUserFeedbackEvent } from "../services/userFeedbackApi.js";
 import { isAdmin } from "../utils/adminAuth.js";
 import { recordFeedbackEvent } from "../utils/feedbackEvents.js";
+import { getFeedbackArtistPreferenceLists } from "../utils/feedbackPreferenceSignals.js";
 
-const HANGOUT_TYPES = [
-  "Apartment hangout",
-  "Picnic",
-  "Road trip",
-  "Party night",
-  "Dinner",
-  "Chill session",
-  "Pre-game",
-  "After-party",
-  "Beach day",
-  "Pool day",
-  "BBQ",
-  "Study session",
-  "Coffee hangout",
-  "Game night",
-  "Workout",
-  "Long drive",
-  "Family gathering",
-  "Date night",
-  "Late-night talk",
-  "House cleaning",
-  "Birthday",
-];
-
-const MOODS = [
-  "Chill",
-  "Energetic",
-  "Dance",
-  "Nostalgic",
-  "Background",
-  "Romantic",
-  "Sad",
-  "Hype",
-  "Sing-along",
-  "Throwback",
-  "Road-trip",
-  "Focus",
-  "Arabic classics",
-  "Pop hits",
-  "Hip-hop",
-  "R&B",
-  "Mixed",
-];
-
-const LANGUAGES = [
-  "English",
-  "Arabic",
-  "Hebrew",
-  "Spanish",
-  "French",
-  "Korean",
-];
-
-const ARTISTS_BY_LANGUAGE = {
-  English: [
-    "Taylor Swift",
-    "Billie Eilish",
-    "Lady Gaga",
-    "Ariana Grande",
-    "Beyonce",
-    "Dua Lipa",
-    "Rihanna",
-    "The Weeknd",
-    "Sabrina Carpenter",
-    "Olivia Rodrigo",
-    "Harry Styles",
-    "Bruno Mars",
-    "Eminem",
-    "JAY-Z",
-    "Kendrick Lamar",
-    "Drake",
-    "Future",
-    "SZA",
-    "Adele",
-    "Frank Ocean",
-    "Travis Scott",
-    "Kanye West",
-    "Post Malone",
-    "Nicki Minaj",
-    "Doja Cat",
-    "Cardi B",
-    "Miley Cyrus",
-    "Justin Bieber",
-    "Selena Gomez",
-    "Katy Perry",
-    "Alicia Keys",
-    "Usher",
-    "Chris Brown",
-    "The Neighbourhood",
-    "Lana Del Rey",
-    "Lorde",
-    "Halsey",
-    "Tate McRae",
-    "Charli xcx",
-    "Chappell Roan",
-    "Madonna",
-    "Michael Jackson",
-    "Britney Spears",
-    "ABBA",
-    "Coldplay",
-    "Imagine Dragons",
-    "Maroon 5",
-    "Ed Sheeran",
-    "Sam Smith",
-    "Ava Max",
-    "A$AP Rocky",
-    "21 Savage",
-    "Metro Boomin",
-    "Lil Wayne",
-    "Tyler, The Creator",
-    "Childish Gambino",
-    "Daniel Caesar",
-    "Giveon",
-    "PARTYNEXTDOOR",
-    "Summer Walker",
-    "Jhene Aiko",
-    "Tyla",
-    "Sean Paul",
-    "Calvin Harris",
-    "David Guetta",
-    "Avicii",
-    "Swedish House Mafia",
-    "Tame Impala",
-    "The 1975",
-    "Arctic Monkeys",
-    "Cigarettes After Sex",
-  ],
-  Arabic: [
-    "Fairuz",
-    "Amr Diab",
-    "Nancy Ajram",
-    "Elissa",
-    "Sherine",
-    "Marwan Khoury",
-    "Kadim Al Sahir",
-    "Umm Kulthum",
-    "Abdel Halim Hafez",
-    "Mohammed Abdel Wahab",
-    "Warda",
-    "Majida El Roumi",
-    "Nawal El Zoghbi",
-    "Najwa Karam",
-    "Ragheb Alama",
-    "Wael Kfoury",
-    "Fadel Chaker",
-    "Assala",
-    "Angham",
-    "Carole Samaha",
-    "Myriam Fares",
-    "Haifa Wehbe",
-    "Tamer Hosny",
-    "Mohamed Hamaki",
-    "Hussain Al Jassmi",
-    "Balqees",
-    "Saad Lamjarred",
-    "Ziad Rahbani",
-    "Mashrou' Leila",
-    "Cairokee",
-    "Autostrad",
-    "Apo & The Apostles",
-    "Massar Egbari",
-    "Le Trio Joubran",
-    "Elyanna",
-    "Saint Levant",
-    "Issam Alnajjar",
-    "Sharmoofers",
-    "Adonis",
-    "Akher Zapheer",
-    "Al Shami",
-    "Abeer Nehme",
-    "Julia Boutros",
-    "Wegz",
-    "Marwan Moussa",
-    "Abyusif",
-    "Shabjdeed",
-    "Daboor",
-    "ElGrandeToto",
-    "Balti",
-  ],
-  Hebrew: [
-    "Omer Adam",
-    "Noa Kirel",
-    "Eden Hason",
-    "Eden Ben Zaken",
-    "Static",
-    "Ben El",
-    "Idan Raichel",
-    "Ishay Ribo",
-  ],
-  Spanish: [
-    "Bad Bunny",
-    "Rosalia",
-    "Shakira",
-    "Karol G",
-    "J Balvin",
-    "Enrique Iglesias",
-    "Rauw Alejandro",
-    "Becky G",
-  ],
-  French: [
-    "Stromae",
-    "Aya Nakamura",
-    "Indila",
-    "Angele",
-    "GIMS",
-    "Dadju",
-    "Zaz",
-  ],
-  Korean: [
-    "BTS",
-    "BLACKPINK",
-    "NewJeans",
-    "TWICE",
-    "Stray Kids",
-    "IVE",
-    "LE SSERAFIM",
-  ],
-};
-
-const ARTISTS_BY_MOOD = {
-  Chill: [
-    "Lana Del Rey",
-    "Adele",
-    "Lorde",
-    "Frank Ocean",
-    "SZA",
-    "Fairuz",
-    "Cigarettes After Sex",
-    "Daniel Caesar",
-  ],
-  Energetic: [
-    "Dua Lipa",
-    "Tate McRae",
-    "Rihanna",
-    "Doja Cat",
-    "Sean Paul",
-    "Bruno Mars",
-    "Calvin Harris",
-  ],
-  Dance: [
-    "Lady Gaga",
-    "Charli xcx",
-    "Madonna",
-    "Calvin Harris",
-    "Bad Bunny",
-    "David Guetta",
-    "Beyonce",
-  ],
-  Nostalgic: [
-    "Michael Jackson",
-    "Britney Spears",
-    "ABBA",
-    "Madonna",
-    "Adele",
-    "Umm Kulthum",
-    "Abdel Halim Hafez",
-  ],
-  Background: [
-    "Norah Jones",
-    "Sade",
-    "The xx",
-    "Cigarettes After Sex",
-    "Fairuz",
-    "Ziad Rahbani",
-  ],
-  Romantic: [
-    "Adele",
-    "Bruno Mars",
-    "Daniel Caesar",
-    "Elissa",
-    "Wael Kfoury",
-    "Marwan Khoury",
-  ],
-  Sad: [
-    "Billie Eilish",
-    "Lana Del Rey",
-    "Adele",
-    "Sherine",
-    "Elissa",
-    "Frank Ocean",
-  ],
-  Hype: [
-    "Eminem",
-    "JAY-Z",
-    "Kendrick Lamar",
-    "Drake",
-    "Future",
-    "Travis Scott",
-    "Wegz",
-    "Marwan Moussa",
-  ],
-  "Sing-along": [
-    "Taylor Swift",
-    "Ariana Grande",
-    "Bruno Mars",
-    "Amr Diab",
-    "Nancy Ajram",
-    "Rihanna",
-  ],
-  Throwback: [
-    "Michael Jackson",
-    "Britney Spears",
-    "Madonna",
-    "ABBA",
-    "Umm Kulthum",
-    "Fairuz",
-  ],
-  "Road-trip": [
-    "Coldplay",
-    "The Weeknd",
-    "Dua Lipa",
-    "Amr Diab",
-    "Sean Paul",
-    "Post Malone",
-  ],
-  Focus: [
-    "Tame Impala",
-    "The 1975",
-    "Frank Ocean",
-    "Fairuz",
-    "Le Trio Joubran",
-    "Sade",
-  ],
-  "Arabic classics": [
-    "Fairuz",
-    "Umm Kulthum",
-    "Abdel Halim Hafez",
-    "Warda",
-    "Kadim Al Sahir",
-    "Majida El Roumi",
-  ],
-  "Pop hits": [
-    "Taylor Swift",
-    "Dua Lipa",
-    "Ariana Grande",
-    "Beyonce",
-    "Rihanna",
-    "Sabrina Carpenter",
-  ],
-  "Hip-hop": [
-    "Eminem",
-    "JAY-Z",
-    "Kendrick Lamar",
-    "Drake",
-    "Future",
-    "Travis Scott",
-    "21 Savage",
-  ],
-  "R&B": [
-    "SZA",
-    "Frank Ocean",
-    "Beyonce",
-    "Usher",
-    "Alicia Keys",
-    "Summer Walker",
-    "Daniel Caesar",
-  ],
-  Mixed: [
-    "Taylor Swift",
-    "The Weeknd",
-    "Beyonce",
-    "Ariana Grande",
-    "Drake",
-    "Amr Diab",
-    "Fairuz",
-  ],
-};
+import {
+  ARTISTS_BY_LANGUAGE,
+  ARTISTS_BY_MOOD,
+  HANGOUT_TYPES,
+  LANGUAGES,
+  MOODS,
+} from "../data/groupMixSurveyData.js";
 
 function getStoredMembers() {
   try {
@@ -429,6 +71,11 @@ function Trip() {
     actionLabel: "",
     action: null,
   });
+  const {
+    feedbackPreferenceSignals,
+    isPersonalFeedbackActive,
+    privateFeedback,
+  } = useActiveRecommendationFeedback();
 
   const saveMembers = (nextMembers) => {
     setMembers(nextMembers);
@@ -452,6 +99,28 @@ function Trip() {
   const surveyIgnoredArtists = useMemo(
     () => getUniqueMemberArtists(members, "ignoredArtists"),
     [members],
+  );
+  const groupFeedbackArtistPreferences = useMemo(
+    () => getFeedbackArtistPreferenceLists(feedbackPreferenceSignals),
+    [feedbackPreferenceSignals],
+  );
+  const groupLikedArtists = useMemo(
+    () => [
+      ...new Set([
+        ...surveyLikedArtists,
+        ...groupFeedbackArtistPreferences.likedArtists,
+      ]),
+    ],
+    [groupFeedbackArtistPreferences.likedArtists, surveyLikedArtists],
+  );
+  const groupIgnoredArtists = useMemo(
+    () => [
+      ...new Set([
+        ...surveyIgnoredArtists,
+        ...groupFeedbackArtistPreferences.ignoredArtists,
+      ]),
+    ],
+    [groupFeedbackArtistPreferences.ignoredArtists, surveyIgnoredArtists],
   );
 
   const hasGroupPlaylistTracks = useMemo(
@@ -585,8 +254,8 @@ function Trip() {
         limit: 25,
         newSongMaxPlays: 5,
         groupMembers: members,
-        surveyLikedArtists,
-        surveyIgnoredArtists,
+        surveyLikedArtists: groupLikedArtists,
+        surveyIgnoredArtists: groupIgnoredArtists,
         contextArtists: surveyArtistPool,
         hangoutType,
         moods,
@@ -699,6 +368,15 @@ function Trip() {
                 picnic, party, road trip, dinner, or anything in between.
               </p>
             </div>
+
+            {isPersonalFeedbackActive && (
+              <div className="mb-6 rounded-lg border border-sky-400/20 bg-sky-400/10 p-4 text-sm text-sky-100">
+                Private feedback is included for{" "}
+                <span className="font-semibold">{privateFeedback.user.email}</span>
+                . Liked artists and songs boost Group Mix; ignored artists are
+                filtered out.
+              </div>
+            )}
 
             <section className="bg-[#181818] rounded-lg p-6 mb-6">
               <label className="block text-sm text-gray-400 mb-2">

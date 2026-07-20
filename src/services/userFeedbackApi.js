@@ -123,6 +123,7 @@ export async function fetchUserFeedbackEvents({
   const { data, error } = await client
     .from(USER_FEEDBACK_TABLE)
     .select("*")
+    .eq("user_id", currentUser.id)
     .order("event_timestamp", { ascending: false })
     .limit(Math.max(1, Math.min(Number(limit) || 500, 1000)));
 

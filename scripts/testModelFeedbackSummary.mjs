@@ -88,4 +88,48 @@ assert.equal(emptySummary.acceptanceRate, "0%");
 assert.equal(emptySummary.ignoreRate, "0%");
 assert.deepEqual(emptySummary.recentEvents, []);
 
+const privateRowSummary = buildModelFeedbackSummary({
+  events: [
+    {
+      id: "private_ignore",
+      event_timestamp: "2026-07-05T10:00:00.000Z",
+      action: "ignore",
+      label: "negative",
+      item_type: "artist",
+      item_name: "Skipped Artist",
+      mode: "private-user",
+      source: "recommendations",
+    },
+    {
+      id: "private_like",
+      event_timestamp: "2026-07-05T10:01:00.000Z",
+      action: "like",
+      label: "positive",
+      item_type: "song",
+      item_name: "Private Song",
+      item_artist: "Private Artist",
+      mode: "private-user",
+      source: "recommendations",
+    },
+  ],
+});
+
+assert.equal(privateRowSummary.totalEvents, 2);
+assert.equal(privateRowSummary.positiveLabels, 1);
+assert.equal(privateRowSummary.negativeLabels, 1);
+assert.equal(privateRowSummary.songEvents, 1);
+assert.equal(privateRowSummary.artistEvents, 1);
+assert.equal(
+  privateRowSummary.latestEventAt,
+  "2026-07-05T10:01:00.000Z",
+);
+assert.deepEqual(
+  privateRowSummary.recentEvents.map((event) => event.id),
+  ["private_like", "private_ignore"],
+);
+assert.equal(
+  privateRowSummary.recentEvents[0].description,
+  "Private Song by Private Artist",
+);
+
 console.log("Model feedback summary tests passed");

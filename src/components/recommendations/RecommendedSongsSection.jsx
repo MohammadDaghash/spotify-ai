@@ -74,6 +74,15 @@ function RecommendedSongsSection({
                   value: rec.diversityPenalty,
                   tone: "red",
                 },
+                ...(rec.feedbackScoreDelta
+                  ? [
+                      {
+                        label: "Feedback",
+                        value: rec.feedbackScoreDelta,
+                        tone: rec.feedbackScoreDelta < 0 ? "red" : "green",
+                      },
+                    ]
+                  : []),
               ]}
             />
 

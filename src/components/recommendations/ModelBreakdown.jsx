@@ -6,7 +6,9 @@ import {
 function ScoreBar({ label, value, tone = "green" }) {
   const numericValue = getNumericScore(value);
   const width =
-    numericValue === null ? 0 : Math.min(100, Math.max(0, numericValue * 100));
+    numericValue === null
+      ? 0
+      : Math.min(100, Math.max(0, Math.abs(numericValue) * 100));
   const toneClass =
     tone === "red"
       ? "bg-red-400"

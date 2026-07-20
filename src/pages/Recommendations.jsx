@@ -20,6 +20,7 @@ import {
 } from "../services/mlApi.js";
 import { syncFeedbackEvent } from "../services/feedbackApi.js";
 import { syncUserFeedbackEvent } from "../services/userFeedbackApi.js";
+import { useActiveRecommendationFeedback } from "../hooks/useActiveRecommendationFeedback.js";
 import { isAdmin } from "../utils/adminAuth.js";
 import { buildDynamicUserProfile } from "../utils/featureEngineering.js";
 import {
@@ -32,6 +33,10 @@ import {
   PRIVATE_SPOTIFY_DATA_CHANGED_EVENT,
   readLocalSpotifyHistory,
 } from "../utils/localSpotifyHistory.js";
+import {
+  applyFeedbackPreferenceReranking,
+  getFeedbackArtistPreferenceLists,
+} from "../utils/feedbackPreferenceSignals.js";
 import { rankPrivateTrackRecommendations } from "../utils/privateRecommendations.js";
 import { hasSpotifyAccessToken } from "../utils/spotifySession.js";
 import { addRankMovementToRows } from "../utils/rankMovement.js";
@@ -79,6 +84,7 @@ function Recommendations() {
   const [feedbackEvents, setFeedbackEvents] = useState(() =>
     getFeedbackEvents(),
   );
+  const [sessionFeedbackEvents, setSessionFeedbackEvents] = useState([]);
   const [userTasteProfile, setUserTasteProfile] = useState(
     buildDynamicUserProfile(candidateTracks),
   );
@@ -109,6 +115,27 @@ function Recommendations() {
     actionLabel: "",
     action: null,
   });
+  const {
+    activeFeedbackEvents,
+    feedbackIgnoredArtists,
+    feedbackIgnoredSongs,
+    feedbackLikedArtists,
+    feedbackLikedSongs,
+    feedbackPreferenceSignals,
+    isPersonalFeedbackActive,
+    privateFeedback,
+  } = useActiveRecommendationFeedback({
+    feedbackEvents,
+    ignoredArtists,
+    ignoredSongs,
+    likedArtists,
+    likedSongs,
+    sessionFeedbackEvents,
+  });
+  const groupFeedbackArtistPreferences = useMemo(
+    () => getFeedbackArtistPreferenceLists(feedbackPreferenceSignals),
+    [feedbackPreferenceSignals],
+  );
   const recommendationSearchParams = useMemo(
     () => new URLSearchParams(location.search),
     [location.search],
@@ -151,6 +178,7 @@ function Recommendations() {
       console.warn("User feedback sync failed", error);
     });
     setFeedbackEvents(getFeedbackEvents());
+    setSessionFeedbackEvents((previousEvents) => [...previousEvents, event]);
 
     return event;
   };
@@ -405,6 +433,18 @@ function Recommendations() {
             groupMembers.flatMap((member) => member.ignoredArtists || []),
           ),
         ];
+        const groupLikedArtists = [
+          ...new Set([
+            ...surveyLikedArtists,
+            ...groupFeedbackArtistPreferences.likedArtists,
+          ]),
+        ];
+        const groupIgnoredArtists = [
+          ...new Set([
+            ...surveyIgnoredArtists,
+            ...groupFeedbackArtistPreferences.ignoredArtists,
+          ]),
+        ];
 
         const privateTrackRecommendations = isPrivateRecommendationMode
           ? rankPrivateTrackRecommendations({
@@ -431,8 +471,8 @@ function Recommendations() {
               limit: 25,
               newSongMaxPlays: 5,
               groupMembers,
-              surveyLikedArtists,
-              surveyIgnoredArtists,
+              surveyLikedArtists: groupLikedArtists,
+              surveyIgnoredArtists: groupIgnoredArtists,
             }),
           ]);
 
@@ -516,20 +556,35 @@ function Recommendations() {
     ignoredArtists,
     likedSongs,
     ignoredSongs,
+    groupFeedbackArtistPreferences,
     isPrivateRecommendationMode,
     localSpotifyHistory,
     maxRecommendedTrackPlays,
   ]);
 
+  const feedbackRankedArtistRecommendations = useMemo(
+    () =>
+      applyFeedbackPreferenceReranking(artistRecommendations, {
+        signals: feedbackPreferenceSignals,
+        itemType: "artist",
+      }),
+    [artistRecommendations, feedbackPreferenceSignals],
+  );
+
   const filteredArtistRecommendations = useMemo(() => {
     return getVisibleArtistRecommendations({
-      recommendations: artistRecommendations,
-      likedArtists,
-      ignoredArtists,
+      recommendations: feedbackRankedArtistRecommendations,
+      likedArtists: feedbackLikedArtists,
+      ignoredArtists: feedbackIgnoredArtists,
       followedArtists,
       limit: visibleRecommendationCount,
     });
-  }, [artistRecommendations, followedArtists, ignoredArtists, likedArtists]);
+  }, [
+    feedbackIgnoredArtists,
+    feedbackLikedArtists,
+    feedbackRankedArtistRecommendations,
+    followedArtists,
+  ]);
 
   const visibleArtistRecommendations = filteredArtistRecommendations;
 
@@ -621,26 +676,35 @@ function Recommendations() {
     });
   }, [trackRecommendations, liveKnownTrackSignals]);
 
+  const feedbackRankedSongRecommendations = useMemo(
+    () =>
+      applyFeedbackPreferenceReranking(recommendationsWithPlayCounts, {
+        signals: feedbackPreferenceSignals,
+        itemType: "song",
+      }),
+    [feedbackPreferenceSignals, recommendationsWithPlayCounts],
+  );
+
   const eligibleSongRecommendations = useMemo(() => {
     return getVisibleSongRecommendations({
-      recommendations: recommendationsWithPlayCounts,
+      recommendations: feedbackRankedSongRecommendations,
       maxPlayCount: maxRecommendedTrackPlays,
-      limit: recommendationsWithPlayCounts.length,
+      limit: feedbackRankedSongRecommendations.length,
     });
-  }, [recommendationsWithPlayCounts, maxRecommendedTrackPlays]);
+  }, [feedbackRankedSongRecommendations, maxRecommendedTrackPlays]);
 
   const rankedRecommendations = useMemo(() => {
     return getVisibleSongRecommendations({
       recommendations: eligibleSongRecommendations,
-      likedSongs,
-      ignoredSongs,
+      likedSongs: feedbackLikedSongs,
+      ignoredSongs: feedbackIgnoredSongs,
       maxPlayCount: maxRecommendedTrackPlays,
       limit: visibleRecommendationCount,
     });
   }, [
     eligibleSongRecommendations,
-    ignoredSongs,
-    likedSongs,
+    feedbackIgnoredSongs,
+    feedbackLikedSongs,
     maxRecommendedTrackPlays,
   ]);
 
@@ -695,7 +759,7 @@ function Recommendations() {
   }, [visibleSongRecommendations]);
 
   const evaluationMetrics = calculateDiscoveryMetrics({
-    recommendations: recommendationsWithPlayCounts,
+    recommendations: feedbackRankedSongRecommendations,
     visibleRecommendations: visibleSongRecommendationsWithDisplayScores,
     eligibleRecommendations: eligibleSongRecommendations,
     k: 3,
@@ -710,12 +774,13 @@ function Recommendations() {
     const topGenres = getTopWeights(effectiveUserTasteProfile.genreWeights, 4);
     const topMoods = getTopWeights(effectiveUserTasteProfile.moodWeights, 4);
     const totalFeedback =
-      likedSongs.length +
-      ignoredSongs.length +
-      likedArtists.length +
-      ignoredArtists.length;
-    const positiveFeedback = likedSongs.length + likedArtists.length;
-    const feedbackEventStats = summarizeFeedbackEvents(feedbackEvents);
+      feedbackLikedSongs.length +
+      feedbackIgnoredSongs.length +
+      feedbackLikedArtists.length +
+      feedbackIgnoredArtists.length;
+    const positiveFeedback =
+      feedbackLikedSongs.length + feedbackLikedArtists.length;
+    const feedbackEventStats = summarizeFeedbackEvents(activeFeedbackEvents);
 
     return {
       feedbackEventStats,
@@ -734,13 +799,13 @@ function Recommendations() {
       eventIgnoreRate: `${Math.round(feedbackEventStats.ignoreRate * 100)}%`,
     };
   }, [
-    likedSongs,
-    ignoredSongs,
-    likedArtists,
-    ignoredArtists,
+    feedbackLikedSongs,
+    feedbackIgnoredSongs,
+    feedbackLikedArtists,
+    feedbackIgnoredArtists,
     liveKnownTrackSignals,
     effectiveUserTasteProfile,
-    feedbackEvents,
+    activeFeedbackEvents,
   ]);
 
   const displayedTripPlaylists = useMemo(
@@ -830,6 +895,20 @@ function Recommendations() {
               </div>
             )}
 
+            {isPersonalFeedbackActive && (
+              <div className="mb-6 rounded-lg border border-sky-400/20 bg-sky-400/10 p-4 text-sm text-sky-100">
+                Personal feedback learning is active for{" "}
+                <span className="font-semibold">{privateFeedback.user.email}</span>
+                . Private likes and ignores are adjusting these rankings.
+              </div>
+            )}
+
+            {privateFeedback.error && (
+              <div className="mb-6 rounded-lg border border-yellow-300/30 bg-yellow-950/30 p-4 text-sm text-yellow-100">
+                Private feedback could not be loaded: {privateFeedback.error}
+              </div>
+            )}
+
             <RecommendedArtistsSection
               applyArtistFeedback={applyArtistFeedback}
               artists={displayedArtistRecommendationsWithDisplayScores}
@@ -845,10 +924,10 @@ function Recommendations() {
             <FeedbackAnalyticsSection
               evaluationMetrics={evaluationMetrics}
               feedbackAnalytics={feedbackAnalytics}
-              ignoredArtists={ignoredArtists}
-              ignoredSongs={ignoredSongs}
-              likedArtists={likedArtists}
-              likedSongs={likedSongs}
+              ignoredArtists={feedbackIgnoredArtists}
+              ignoredSongs={feedbackIgnoredSongs}
+              likedArtists={feedbackLikedArtists}
+              likedSongs={feedbackLikedSongs}
             />
 
             <GroupPlaylistsSection

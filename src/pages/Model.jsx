@@ -5,6 +5,11 @@ import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import StatCard from "../components/common/StatCard.jsx";
 import { fetchServerFeedbackEvents } from "../services/feedbackApi.js";
+import { fetchUserFeedbackEvents } from "../services/userFeedbackApi.js";
+import {
+  USER_SESSION_CHANGED_EVENT,
+  getCurrentUser,
+} from "../services/userAuth.js";
 import { trainFeedbackLogisticBaseline } from "../utils/feedbackLearningModel.js";
 import { buildModelFeedbackSummary } from "../utils/modelFeedbackSummary.js";
 
@@ -30,40 +35,103 @@ function formatDateTime(value) {
   }
 }
 
-function Model() {
-  const [feedbackDataset, setFeedbackDataset] = useState({
+function createFeedbackDataset(storageMode = "unknown") {
+  return {
     events: [],
     status: {},
-    storageMode: "unknown",
-  });
+    storageMode,
+    skipped: "",
+    user: null,
+  };
+}
+
+function Model() {
+  const [publicFeedbackDataset, setPublicFeedbackDataset] = useState(() =>
+    createFeedbackDataset("unknown"),
+  );
+  const [privateFeedbackDataset, setPrivateFeedbackDataset] = useState(() =>
+    createFeedbackDataset("supabase"),
+  );
+  const [activeUser, setActiveUser] = useState(null);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
   const [feedbackError, setFeedbackError] = useState("");
+  const [privateFeedbackError, setPrivateFeedbackError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadFeedbackDataset() {
+    async function loadFeedbackDatasets() {
       try {
         setFeedbackLoading(true);
         setFeedbackError("");
+        setPrivateFeedbackError("");
 
-        const data = await fetchServerFeedbackEvents(100);
+        const publicFeedbackPromise = fetchServerFeedbackEvents(100);
+        const privateFeedbackPromise = (async () => {
+          const user = await getCurrentUser();
+
+          if (!user?.id || user.provider !== "supabase") {
+            return {
+              user,
+              data: {
+                events: [],
+                skipped: user?.provider === "local-dev"
+                  ? "local_dev_user"
+                  : "missing_supabase_user",
+              },
+            };
+          }
+
+          return {
+            user,
+            data: await fetchUserFeedbackEvents({ user, limit: 500 }),
+          };
+        })();
+
+        const [publicResult, privateResult] = await Promise.allSettled([
+          publicFeedbackPromise,
+          privateFeedbackPromise,
+        ]);
 
         if (!isMounted) return;
 
-        setFeedbackDataset({
-          events: data.events || [],
-          status: data.status || {},
-          storageMode: data.storage_mode || "unknown",
-        });
-      } catch (error) {
-        if (!isMounted) return;
+        if (publicResult.status === "fulfilled") {
+          setPublicFeedbackDataset({
+            events: publicResult.value.events || [],
+            status: publicResult.value.status || {},
+            storageMode: publicResult.value.storage_mode || "unknown",
+            skipped: "",
+            user: null,
+          });
+        } else {
+          setPublicFeedbackDataset(createFeedbackDataset("unknown"));
+          setFeedbackError(
+            publicResult.reason instanceof Error
+              ? publicResult.reason.message
+              : "Could not load server feedback.",
+          );
+        }
 
-        setFeedbackError(
-          error instanceof Error
-            ? error.message
-            : "Could not load server feedback.",
-        );
+        if (privateResult.status === "fulfilled") {
+          const { user, data } = privateResult.value;
+
+          setActiveUser(user || null);
+          setPrivateFeedbackDataset({
+            events: data.events || [],
+            status: data.status || {},
+            storageMode: "supabase",
+            skipped: data.skipped || "",
+            user: user || null,
+          });
+        } else {
+          setActiveUser(null);
+          setPrivateFeedbackDataset(createFeedbackDataset("supabase"));
+          setPrivateFeedbackError(
+            privateResult.reason instanceof Error
+              ? privateResult.reason.message
+              : "Could not load private user feedback.",
+          );
+        }
       } finally {
         if (isMounted) {
           setFeedbackLoading(false);
@@ -71,27 +139,59 @@ function Model() {
       }
     }
 
-    loadFeedbackDataset();
+    loadFeedbackDatasets();
+
+    window.addEventListener(USER_SESSION_CHANGED_EVENT, loadFeedbackDatasets);
 
     return () => {
       isMounted = false;
+      window.removeEventListener(
+        USER_SESSION_CHANGED_EVENT,
+        loadFeedbackDatasets,
+      );
     };
   }, []);
 
+  const publicFeedbackSummary = useMemo(
+    () =>
+      buildModelFeedbackSummary({
+        events: publicFeedbackDataset.events,
+        status: publicFeedbackDataset.status,
+      }),
+    [publicFeedbackDataset],
+  );
+  const privateFeedbackSummary = useMemo(
+    () =>
+      buildModelFeedbackSummary({
+        events: privateFeedbackDataset.events,
+        status: privateFeedbackDataset.status,
+      }),
+    [privateFeedbackDataset],
+  );
+  const hasPrivateFeedback = privateFeedbackDataset.events.length > 0;
+  const activeFeedbackDataset = hasPrivateFeedback
+    ? privateFeedbackDataset
+    : publicFeedbackDataset;
   const feedbackSummary = useMemo(
     () =>
       buildModelFeedbackSummary({
-        events: feedbackDataset.events,
-        status: feedbackDataset.status,
+        events: activeFeedbackDataset.events,
+        status: activeFeedbackDataset.status,
       }),
-    [feedbackDataset],
+    [activeFeedbackDataset],
   );
   const feedbackBaseline = useMemo(
-    () => trainFeedbackLogisticBaseline(feedbackDataset.events),
-    [feedbackDataset.events],
+    () => trainFeedbackLogisticBaseline(activeFeedbackDataset.events),
+    [activeFeedbackDataset.events],
   );
   const baselineStatusLabel =
     feedbackBaseline.status === "trained" ? "Trained" : "Needs more labels";
+  const activeFeedbackSourceLabel = hasPrivateFeedback
+    ? "Private user feedback"
+    : "Public demo feedback";
+  const privateFeedbackStatus = activeUser?.provider === "supabase"
+    ? `${privateFeedbackSummary.totalEvents} private events for ${activeUser.email}`
+    : "Sign in with a personal account to store private feedback.";
 
   return (
     <div className="app-shell h-screen bg-black flex flex-col">
@@ -127,15 +227,15 @@ function Model() {
                     Feedback training dataset
                   </h2>
                   <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-300">
-                    This is the durable event stream from Like, Ignore, Save,
-                    Open Spotify, and playlist creation actions. It is the
-                    dataset we will later use for logistic regression and
-                    evaluation.
+                    This combines the public demo event stream with private
+                    Supabase feedback when a user is signed in. The learning
+                    baseline uses private user feedback first, then falls back
+                    to public demo feedback.
                   </p>
                 </div>
 
                 <div className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gray-300">
-                  storage mode: {feedbackDataset.storageMode}
+                  active source: {activeFeedbackSourceLabel}
                 </div>
               </div>
 
@@ -144,6 +244,51 @@ function Model() {
                   {feedbackError}
                 </div>
               ) : null}
+
+              {privateFeedbackError ? (
+                <div className="mt-5 rounded-lg border border-yellow-300/30 bg-yellow-950/30 p-4 text-sm text-yellow-100">
+                  Private feedback unavailable: {privateFeedbackError}
+                </div>
+              ) : null}
+
+              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="rounded-lg border border-white/10 bg-black/30 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                    Public demo feedback
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {feedbackLoading ? "..." : publicFeedbackSummary.totalEvents}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    storage mode: {publicFeedbackDataset.storageMode}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-white/10 bg-black/30 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                    Private user feedback
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {feedbackLoading ? "..." : privateFeedbackSummary.totalEvents}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {privateFeedbackStatus}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-white/10 bg-black/30 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                    Baseline training source
+                  </p>
+                  <p className="mt-2 text-lg font-bold">
+                    {activeFeedbackSourceLabel}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Public data stays readable; personal feedback stays scoped
+                    to the signed-in user.
+                  </p>
+                </div>
+              </div>
 
               <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
                 <StatCard
