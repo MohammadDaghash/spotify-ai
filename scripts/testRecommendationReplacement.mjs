@@ -4,6 +4,8 @@ import {
   getVisibleArtistRecommendations,
   getVisibleSongRecommendations,
 } from "../src/utils/recommendationLists.js";
+import { mergeSongRecommendationBackfills } from "../src/utils/songRecommendationBackfill.js";
+import { buildTrackPlayCountMap } from "../src/utils/trackPlayCounts.js";
 
 const artistPool = [
   { artist: "A", score: 0.9 },
@@ -90,6 +92,70 @@ assert.deepEqual(
     limit: 5,
   }).map((track) => track.trackName),
   ["A", "E", "F", "G"],
+);
+
+const knownTrackPlayCounts = buildTrackPlayCountMap([
+  {
+    master_metadata_track_name: "A",
+    master_metadata_album_artist_name: "Artist 1",
+    streams: 10,
+  },
+  {
+    master_metadata_track_name: "E",
+    master_metadata_album_artist_name: "Different credit",
+    streams: 12,
+  },
+]);
+
+assert.deepEqual(
+  getVisibleSongRecommendations({
+    recommendations: songPool,
+    likedSongs: [],
+    ignoredSongs: [],
+    knownTrackPlayCounts,
+    maxPlayCount: 10,
+    limit: 5,
+  }).map((track) => track.trackName),
+  ["B", "D", "F", "G"],
+);
+
+const fallbackTrackPlayCounts = buildTrackPlayCountMap([
+  {
+    master_metadata_track_name: "Less Than Zero",
+    master_metadata_album_artist_name: "The Weeknd",
+    streams: 10,
+  },
+  {
+    master_metadata_track_name: "CHIHIRO",
+    master_metadata_album_artist_name: "Billie Eilish",
+    streams: 10,
+  },
+]);
+const fallbackSongPool = mergeSongRecommendationBackfills({
+  trackRecommendations: [],
+  knownTrackPlayCounts: fallbackTrackPlayCounts,
+  maxPlayCount: 10,
+});
+const fallbackVisibleSongs = getVisibleSongRecommendations({
+  recommendations: fallbackSongPool,
+  knownTrackPlayCounts: fallbackTrackPlayCounts,
+  maxPlayCount: 10,
+  limit: 5,
+});
+
+assert.equal(fallbackVisibleSongs.length, 5);
+assert.ok(
+  fallbackVisibleSongs.every((track) => track.source === "catalog-backfill"),
+);
+assert.ok(
+  !fallbackVisibleSongs
+    .map((track) => track.trackName || track.track_name)
+    .includes("Less Than Zero"),
+);
+assert.ok(
+  !fallbackVisibleSongs
+    .map((track) => track.trackName || track.track_name)
+    .includes("CHIHIRO"),
 );
 
 console.log("Recommendation replacement tests passed");

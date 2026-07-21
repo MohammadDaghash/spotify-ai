@@ -13,7 +13,6 @@ import RecommendedSongsSection from "../components/recommendations/RecommendedSo
 import { useSpotifyContext } from "../context/useSpotifyContext.js";
 
 import { candidateTracks } from "../data/demoMusicData.js";
-import { allSpotifyHistory } from "../data/loadSpotifyHistory.js";
 import {
   getArtistRecommendations,
   getTrackRecommendations,
@@ -42,14 +41,11 @@ import { mergeArtistRecommendationBackfills } from "../utils/artistRecommendatio
 import { rankPrivateTrackRecommendations } from "../utils/privateRecommendations.js";
 import { hasSpotifyAccessToken } from "../utils/spotifySession.js";
 import { addRankMovementToRows } from "../utils/rankMovement.js";
-import {
-  getVisibleArtistRecommendations,
-  getVisibleSongRecommendations,
-} from "../utils/recommendationLists.js";
-import {
-  ARTIST_DISCOVERY_MAX_STREAMS,
-  buildArtistStreamCountMap,
-} from "../utils/artistStreamCounts.js";
+import { getVisibleArtistRecommendations, getVisibleSongRecommendations } from "../utils/recommendationLists.js";
+import { ARTIST_DISCOVERY_MAX_STREAMS } from "../utils/artistStreamCounts.js";
+import { useRecommendationDiscoveryCounts } from "../hooks/useRecommendationDiscoveryCounts.js";
+import { mergeSongRecommendationBackfills } from "../utils/songRecommendationBackfill.js";
+import { getTrackPlayCount } from "../utils/trackPlayCounts.js";
 import {
   addRelativeMatchScores,
   applyWeightDelta,
@@ -568,13 +564,8 @@ function Recommendations() {
     maxRecommendedTrackPlays,
   ]);
 
-  const artistDiscoveryStreamCounts = useMemo(
-    () =>
-      buildArtistStreamCountMap(
-        isPrivateRecommendationMode ? localSpotifyHistory : allSpotifyHistory,
-      ),
-    [isPrivateRecommendationMode, localSpotifyHistory],
-  );
+  const { artistStreamCounts: artistDiscoveryStreamCounts, trackPlayCounts: trackDiscoveryPlayCounts } =
+    useRecommendationDiscoveryCounts({ isPrivateRecommendationMode, localSpotifyHistory });
 
   const artistRecommendationCandidatePool = useMemo(
     () =>
@@ -596,7 +587,7 @@ function Recommendations() {
     [artistRecommendationCandidatePool, feedbackPreferenceSignals],
   );
 
-  const filteredArtistRecommendations = useMemo(() => {
+  const visibleArtistRecommendations = useMemo(() => {
     return getVisibleArtistRecommendations({
       recommendations: feedbackRankedArtistRecommendations,
       likedArtists: feedbackLikedArtists,
@@ -613,8 +604,6 @@ function Recommendations() {
     feedbackRankedArtistRecommendations,
     followedArtists,
   ]);
-
-  const visibleArtistRecommendations = filteredArtistRecommendations;
 
   const visibleArtistRecommendationsWithDisplayScores = useMemo(() => {
     const currentRows = addRelativeMatchScores(visibleArtistRecommendations).map(
@@ -678,10 +667,24 @@ function Recommendations() {
     };
   }, [userTasteProfile, liveTasteArtistWeights]);
 
+  const trackRecommendationCandidatePool = useMemo(
+    () =>
+      mergeSongRecommendationBackfills({
+        trackRecommendations,
+        knownTrackPlayCounts: trackDiscoveryPlayCounts,
+        maxPlayCount: maxRecommendedTrackPlays,
+      }),
+    [maxRecommendedTrackPlays, trackDiscoveryPlayCounts, trackRecommendations],
+  );
+
   const recommendationsWithPlayCounts = useMemo(() => {
-    return trackRecommendations.map((track) => {
+    return trackRecommendationCandidatePool.map((track) => {
       const trackName = track.track_name;
       const artistName = track.artist_name;
+      const historyPlayCount = Math.max(
+        Number(track.streams || 0),
+        getTrackPlayCount(trackName, artistName, trackDiscoveryPlayCounts),
+      );
 
       return {
         ...track,
@@ -695,14 +698,18 @@ function Recommendations() {
         diversityPenalty: track.diversity_penalty,
         knownTrackPenalty: track.known_track_penalty,
         recentListenStrength: track.recent_listen_strength,
-        historyPlayCount: track.streams || 0,
+        historyPlayCount,
         liveKnownReason:
           liveKnownTrackSignals.get(
             getTrackHistoryKey(trackName, artistName),
           ) || "",
       };
     });
-  }, [trackRecommendations, liveKnownTrackSignals]);
+  }, [
+    trackDiscoveryPlayCounts,
+    trackRecommendationCandidatePool,
+    liveKnownTrackSignals,
+  ]);
 
   const feedbackRankedSongRecommendations = useMemo(
     () =>
@@ -716,16 +723,22 @@ function Recommendations() {
   const eligibleSongRecommendations = useMemo(() => {
     return getVisibleSongRecommendations({
       recommendations: feedbackRankedSongRecommendations,
+      knownTrackPlayCounts: trackDiscoveryPlayCounts,
       maxPlayCount: maxRecommendedTrackPlays,
       limit: feedbackRankedSongRecommendations.length,
     });
-  }, [feedbackRankedSongRecommendations, maxRecommendedTrackPlays]);
+  }, [
+    feedbackRankedSongRecommendations,
+    maxRecommendedTrackPlays,
+    trackDiscoveryPlayCounts,
+  ]);
 
-  const rankedRecommendations = useMemo(() => {
+  const visibleSongRecommendations = useMemo(() => {
     return getVisibleSongRecommendations({
       recommendations: eligibleSongRecommendations,
       likedSongs: feedbackLikedSongs,
       ignoredSongs: feedbackIgnoredSongs,
+      knownTrackPlayCounts: trackDiscoveryPlayCounts,
       maxPlayCount: maxRecommendedTrackPlays,
       limit: visibleRecommendationCount,
     });
@@ -734,9 +747,8 @@ function Recommendations() {
     feedbackIgnoredSongs,
     feedbackLikedSongs,
     maxRecommendedTrackPlays,
+    trackDiscoveryPlayCounts,
   ]);
-
-  const visibleSongRecommendations = rankedRecommendations;
 
   const visibleSongRecommendationsWithDisplayScores = useMemo(() => {
     const currentRows = addRelativeMatchScores(visibleSongRecommendations).map(

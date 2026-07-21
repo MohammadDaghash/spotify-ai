@@ -3,10 +3,11 @@ import {
   getArtistStreamCount,
   normalizeArtistKey,
 } from "./artistStreamCounts.js";
-
-function normalizeName(value) {
-  return String(value || "").trim().toLowerCase();
-}
+import {
+  getTrackIdentityKey,
+  getTrackPlayCount,
+  normalizeTrackKeyPart,
+} from "./trackPlayCounts.js";
 
 function uniqueBy(items, getKey) {
   const seen = new Set();
@@ -62,25 +63,39 @@ export function getVisibleSongRecommendations({
   recommendations = [],
   likedSongs = [],
   ignoredSongs = [],
+  knownTrackPlayCounts = new Map(),
   maxPlayCount = 10,
   limit = 5,
 } = {}) {
   const excludedTrackNames = new Set(
-    [...likedSongs, ...ignoredSongs].map(normalizeName),
+    [...likedSongs, ...ignoredSongs].map(normalizeTrackKeyPart),
   );
 
   return uniqueBy(
     recommendations,
-    (track) =>
-      `${normalizeName(track?.trackName || track?.track_name)}::${normalizeName(
-        track?.artistName || track?.artist_name,
-      )}`,
+    (track) => {
+      const trackName = track?.trackName || track?.track_name;
+      const artistName = track?.artistName || track?.artist_name;
+
+      return getTrackIdentityKey(trackName, artistName);
+    },
   )
-    .filter((track) => Number(track.historyPlayCount ?? track.streams ?? 0) < maxPlayCount)
+    .filter((track) => {
+      const trackName = track.trackName || track.track_name;
+      const artistName = track.artistName || track.artist_name;
+      const candidatePlayCount = Math.max(
+        Number(track.historyPlayCount ?? track.streams ?? 0),
+        getTrackPlayCount(trackName, artistName, knownTrackPlayCounts),
+      );
+
+      return candidatePlayCount < maxPlayCount;
+    })
     .filter((track) => !track.liveKnownReason)
     .filter(
       (track) =>
-        !excludedTrackNames.has(normalizeName(track.trackName || track.track_name)),
+        !excludedTrackNames.has(
+          normalizeTrackKeyPart(track.trackName || track.track_name),
+        ),
     )
     .slice(0, limit);
 }
