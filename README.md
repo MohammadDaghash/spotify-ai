@@ -151,8 +151,14 @@ cost = binary cross-entropy + L2 regularization
 
 It prints feature-scaling parameters, gradient-descent cost checkpoints,
 manual NumPy accuracy/log-loss, a scikit-learn comparison, and learned
-coefficients. When enough real Supabase Like/Ignore events exist, this same
-experiment can switch from proxy labels to real feedback labels:
+coefficients. The current feature matrix includes listening behavior
+(`streams`, minutes, skip rate, recency, completion strength), discovery
+knownness (`track_play_count`, `artist_stream_count`), and recommendation
+signals captured from feedback events (`similarity`, `quality`, `confidence`,
+known-item penalties, feedback score delta, and catalog-fallback source).
+
+When enough real Supabase Like/Ignore events exist, this same experiment can
+switch from proxy labels to real feedback labels:
 
 ```bash
 npm run export:feedback-python

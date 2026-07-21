@@ -46,6 +46,7 @@ import { ARTIST_DISCOVERY_MAX_STREAMS } from "../utils/artistStreamCounts.js";
 import { useRecommendationDiscoveryCounts } from "../hooks/useRecommendationDiscoveryCounts.js";
 import { mergeSongRecommendationBackfills } from "../utils/songRecommendationBackfill.js";
 import { getTrackPlayCount } from "../utils/trackPlayCounts.js";
+import { buildRecommendationFeedbackFeatures } from "../utils/recommendationFeedbackFeatures.js";
 import {
   addRelativeMatchScores,
   applyWeightDelta,
@@ -169,6 +170,7 @@ function Recommendations() {
       context: {
         route: "/recommendations",
         searchQuery: recommendationSearchQuery,
+        modelFeatures: buildRecommendationFeedbackFeatures(item),
         ...context,
       },
     });

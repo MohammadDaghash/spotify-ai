@@ -7,6 +7,7 @@ import {
   recordFeedbackEvent,
   summarizeFeedbackEvents,
 } from "../src/utils/feedbackEvents.js";
+import { buildRecommendationFeedbackFeatures } from "../src/utils/recommendationFeedbackFeatures.js";
 
 function createMemoryStorage() {
   const values = new Map();
@@ -45,6 +46,15 @@ const likedSong = recordFeedbackEvent(
     context: {
       route: "/recommendations",
       maxPlayCount: 10,
+      modelFeatures: buildRecommendationFeedbackFeatures({
+        score: 0.82,
+        source: "catalog-backfill",
+        similarityScore: 0.7,
+        qualityScore: 0.8,
+        confidence: 0.75,
+        historyPlayCount: 2,
+        feedbackScoreDelta: 0.12,
+      }),
     },
   },
   {
@@ -86,6 +96,24 @@ assert.equal(likedSong.label, "positive");
 assert.deepEqual(likedSong.context, {
   route: "/recommendations",
   maxPlayCount: 10,
+  modelFeatures: {
+    source: "catalog-backfill",
+    isCatalogBackfill: true,
+    similarityScore: 0.7,
+    rawSimilarityScore: null,
+    qualityScore: 0.8,
+    confidence: 0.75,
+    recencyScore: null,
+    knownTrackPenalty: null,
+    knownArtistPenalty: null,
+    diversityPenalty: null,
+    feedbackScoreDelta: 0.12,
+    historyPlayCount: 2,
+    artistStreamCount: null,
+    skipRate: null,
+    listenStrength: null,
+    recentListenStrength: null,
+  },
 });
 
 assert.equal(ignoredArtist.label, "negative");

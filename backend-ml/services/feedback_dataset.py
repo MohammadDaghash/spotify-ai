@@ -9,6 +9,20 @@ import pandas as pd
 POSITIVE_ACTIONS = {"like", "save"}
 NEGATIVE_ACTIONS = {"ignore"}
 LABELABLE_ITEM_TYPES = {"song", "artist"}
+FEEDBACK_SIGNAL_COLUMNS = [
+    "feedback_model_score",
+    "feedback_relative_match",
+    "feedback_similarity_score",
+    "feedback_quality_score",
+    "feedback_confidence",
+    "feedback_recency_score",
+    "feedback_known_track_penalty",
+    "feedback_diversity_penalty",
+    "feedback_score_delta",
+    "feedback_history_play_count",
+    "feedback_artist_stream_count",
+    "feedback_is_catalog_backfill",
+]
 
 
 def _clean_text(value) -> str:
@@ -31,6 +45,96 @@ def _normalize_key(value) -> str:
 
 def _track_key(track_name, artist_name) -> str:
     return f"{_normalize_key(track_name)}::{_normalize_key(artist_name)}"
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+
+    return number if pd.notna(number) else default
+
+
+def _parse_context(value) -> dict:
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+
+        return parsed if isinstance(parsed, dict) else {}
+
+    return {}
+
+
+def _context_value(context: dict, *keys, default=0.0):
+    current = context
+
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            return default
+
+        current = current[key]
+
+    return current
+
+
+def _extract_feedback_signals(event) -> dict:
+    context = _parse_context(event.get("context", {}))
+    model_features = _parse_context(context.get("modelFeatures", {}))
+    recommendation_source = _clean_text(
+        context.get("recommendationSource")
+        or model_features.get("source")
+        or event.get("source")
+    )
+    is_catalog_backfill = (
+        model_features.get("isCatalogBackfill")
+        or "catalog" in recommendation_source.lower()
+    )
+
+    return {
+        "recommendation_source": recommendation_source,
+        "feedback_model_score": _safe_float(event.get("score")),
+        "feedback_relative_match": _safe_float(event.get("relative_match")),
+        "feedback_similarity_score": _safe_float(
+            _context_value(model_features, "similarityScore")
+        ),
+        "feedback_quality_score": _safe_float(
+            _context_value(model_features, "qualityScore")
+        ),
+        "feedback_confidence": _safe_float(
+            _context_value(model_features, "confidence")
+        ),
+        "feedback_recency_score": _safe_float(
+            _context_value(model_features, "recencyScore")
+        ),
+        "feedback_known_track_penalty": _safe_float(
+            _context_value(model_features, "knownTrackPenalty")
+        ),
+        "feedback_diversity_penalty": _safe_float(
+            _context_value(model_features, "diversityPenalty")
+        ),
+        "feedback_score_delta": _safe_float(
+            _context_value(model_features, "feedbackScoreDelta")
+        ),
+        "feedback_history_play_count": _safe_float(
+            _context_value(model_features, "historyPlayCount")
+        ),
+        "feedback_artist_stream_count": _safe_float(
+            _context_value(model_features, "artistStreamCount")
+        ),
+        "feedback_is_catalog_backfill": float(bool(is_catalog_backfill)),
+    }
 
 
 def _load_json_feedback(path: Path) -> list[dict]:
@@ -140,6 +244,8 @@ def build_feedback_label_frame(feedback_events: pd.DataFrame) -> pd.DataFrame:
                 "liked_label",
                 "feedback_action",
                 "feedback_event_timestamp",
+                "recommendation_source",
+                *FEEDBACK_SIGNAL_COLUMNS,
             ]
         )
 
@@ -166,6 +272,7 @@ def build_feedback_label_frame(feedback_events: pd.DataFrame) -> pd.DataFrame:
                 "liked_label": liked_label,
                 "feedback_action": event["action"],
                 "feedback_event_timestamp": event["event_timestamp"],
+                **_extract_feedback_signals(event),
             }
         )
 
@@ -198,35 +305,40 @@ def join_feedback_labels_to_track_features(
     )
     features["artist_key"] = features["artist_name"].map(_normalize_key)
 
+    label_metadata_columns = [
+        "liked_label",
+        "feedback_action",
+        "feedback_event_timestamp",
+        "recommendation_source",
+        *FEEDBACK_SIGNAL_COLUMNS,
+    ]
     song_labels = labels[labels["item_type"] == "song"][
-        [
-            "track_key",
-            "liked_label",
-            "feedback_action",
-            "feedback_event_timestamp",
-        ]
+        ["track_key", *label_metadata_columns]
     ].rename(
         columns={
             "liked_label": "song_liked_label",
             "feedback_action": "song_feedback_action",
             "feedback_event_timestamp": "song_feedback_event_timestamp",
+            **{
+                column: f"song_{column}"
+                for column in ["recommendation_source", *FEEDBACK_SIGNAL_COLUMNS]
+            },
         }
     )
     labeled_tracks = features.merge(song_labels, on="track_key", how="left")
 
     if include_artist_feedback:
         artist_labels = labels[labels["item_type"] == "artist"][
-            [
-                "artist_key",
-                "liked_label",
-                "feedback_action",
-                "feedback_event_timestamp",
-            ]
+            ["artist_key", *label_metadata_columns]
         ].rename(
             columns={
                 "liked_label": "artist_liked_label",
                 "feedback_action": "artist_feedback_action",
                 "feedback_event_timestamp": "artist_feedback_event_timestamp",
+                **{
+                    column: f"artist_{column}"
+                    for column in ["recommendation_source", *FEEDBACK_SIGNAL_COLUMNS]
+                },
             }
         )
         labeled_tracks = labeled_tracks.merge(
@@ -238,6 +350,8 @@ def join_feedback_labels_to_track_features(
         labeled_tracks["artist_liked_label"] = pd.NA
         labeled_tracks["artist_feedback_action"] = ""
         labeled_tracks["artist_feedback_event_timestamp"] = pd.NaT
+        for column in ["recommendation_source", *FEEDBACK_SIGNAL_COLUMNS]:
+            labeled_tracks[f"artist_{column}"] = pd.NA
 
     labeled_tracks["liked_label"] = labeled_tracks["song_liked_label"].combine_first(
         labeled_tracks["artist_liked_label"]
@@ -254,6 +368,14 @@ def join_feedback_labels_to_track_features(
     labeled_tracks["feedback_event_timestamp"] = labeled_tracks[
         "song_feedback_event_timestamp"
     ].combine_first(labeled_tracks["artist_feedback_event_timestamp"])
+    labeled_tracks["recommendation_source"] = labeled_tracks[
+        "song_recommendation_source"
+    ].combine_first(labeled_tracks["artist_recommendation_source"])
+
+    for column in FEEDBACK_SIGNAL_COLUMNS:
+        labeled_tracks[column] = labeled_tracks[f"song_{column}"].combine_first(
+            labeled_tracks[f"artist_{column}"]
+        )
 
     labeled_tracks = labeled_tracks.dropna(subset=["liked_label"]).copy()
     labeled_tracks["liked_label"] = labeled_tracks["liked_label"].astype(float)

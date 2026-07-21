@@ -14,7 +14,10 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.append(str(BACKEND_DIR))
 
-from services.feedback_dataset import build_real_feedback_training_frame
+from services.feedback_dataset import (
+    FEEDBACK_SIGNAL_COLUMNS,
+    build_real_feedback_training_frame,
+)
 from services.recommender import build_track_features
 from services.spotify_parser import load_combined_spotify_history
 
@@ -29,6 +32,18 @@ FEATURE_COLUMNS = [
     "log_recent_listen_strength",
     "recency_score",
     "completion_signal",
+    "log_track_play_count",
+    "log_artist_stream_count",
+    "feedback_model_score",
+    "feedback_relative_match_scaled",
+    "feedback_similarity_score",
+    "feedback_quality_score",
+    "feedback_confidence",
+    "feedback_recency_score",
+    "feedback_known_track_penalty",
+    "feedback_diversity_penalty",
+    "feedback_score_delta",
+    "feedback_is_catalog_backfill",
 ]
 
 
@@ -161,6 +176,55 @@ def add_proxy_feedback_labels(track_features: pd.DataFrame) -> pd.DataFrame:
     return labeled_tracks.dropna(subset=["liked_label"]).copy()
 
 
+def add_knownness_features(track_features: pd.DataFrame) -> pd.DataFrame:
+    features = track_features.copy()
+    if "track_play_count" not in features.columns:
+        features["track_play_count"] = features["streams"]
+
+    if "artist_stream_count" not in features.columns:
+        features["artist_stream_count"] = features.groupby("artist_name")[
+            "streams"
+        ].transform("sum")
+
+    features["log_track_play_count"] = np.log1p(
+        features["track_play_count"].fillna(0).clip(lower=0)
+    )
+    features["log_artist_stream_count"] = np.log1p(
+        features["artist_stream_count"].fillna(0).clip(lower=0)
+    )
+
+    return features
+
+
+def finalize_training_features(training_frame: pd.DataFrame) -> pd.DataFrame:
+    frame = add_knownness_features(training_frame)
+
+    for column in FEEDBACK_SIGNAL_COLUMNS:
+        if column not in frame.columns:
+            frame[column] = 0.0
+
+        frame[column] = pd.to_numeric(frame[column], errors="coerce").fillna(0)
+
+    frame["feedback_relative_match_scaled"] = (
+        frame["feedback_relative_match"].clip(lower=0, upper=100) / 100
+    )
+    if "recommendation_source" not in frame.columns:
+        frame["recommendation_source"] = ""
+    else:
+        frame["recommendation_source"] = frame["recommendation_source"].fillna("")
+    frame["is_song_feedback_label"] = (frame["label_source"] == "song_feedback").astype(
+        int
+    )
+    frame["is_artist_feedback_label"] = (
+        frame["label_source"] == "artist_feedback"
+    ).astype(int)
+    frame["is_proxy_label"] = (
+        frame["label_source"] == "proxy_listening_behavior"
+    ).astype(int)
+
+    return frame
+
+
 def validate_training_labels(training_frame: pd.DataFrame) -> None:
     label_counts = training_frame["liked_label"].value_counts().to_dict()
 
@@ -186,7 +250,7 @@ def build_training_frame(
     include_artist_feedback: bool = True,
 ) -> pd.DataFrame:
     history = load_combined_spotify_history(data_path)
-    track_features = build_track_features(history)
+    track_features = add_knownness_features(build_track_features(history))
 
     if label_source == "proxy":
         labeled_tracks = add_proxy_feedback_labels(track_features)
@@ -206,6 +270,7 @@ def build_training_frame(
             "For --label-source feedback, export feedback events first."
         )
 
+    labeled_tracks = finalize_training_features(labeled_tracks)
     validate_training_labels(labeled_tracks)
 
     return labeled_tracks
@@ -363,8 +428,11 @@ def print_experiment_report(results: dict, top_n: int = 8) -> None:
         "track_name",
         "artist_name",
         "streams",
+        "artist_stream_count",
         "skip_rate",
         "listen_strength",
+        "feedback_model_score",
+        "recommendation_source",
         "liked_label",
         "label_source",
         "manual_p_like",

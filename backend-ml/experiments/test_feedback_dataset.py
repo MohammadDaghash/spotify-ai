@@ -40,6 +40,22 @@ def test_feedback_labels_join_to_tracks():
                 "item_type": "song",
                 "item_name": "Song A",
                 "item_artist": "Artist One",
+                "score": 0.82,
+                "relative_match": 94,
+                "source": "recommendations",
+                "context": {
+                    "recommendationSource": "catalog-backfill",
+                    "modelFeatures": {
+                        "similarityScore": 0.7,
+                        "qualityScore": 0.8,
+                        "confidence": 0.75,
+                        "recencyScore": 0.6,
+                        "knownTrackPenalty": 0.1,
+                        "diversityPenalty": 0.05,
+                        "feedbackScoreDelta": 0.12,
+                        "historyPlayCount": 2,
+                    },
+                },
             },
             {
                 "event_timestamp": "2026-07-01T10:05:00Z",
@@ -85,6 +101,21 @@ def test_feedback_labels_join_to_tracks():
         "Song A": "song_feedback",
         "Song B": "artist_feedback",
     }
+
+    song_a = labeled_tracks[labeled_tracks["track_name"] == "Song A"].iloc[0]
+
+    assert song_a["recommendation_source"] == "catalog-backfill"
+    assert song_a["feedback_model_score"] == 0.82
+    assert song_a["feedback_relative_match"] == 94
+    assert song_a["feedback_similarity_score"] == 0.7
+    assert song_a["feedback_quality_score"] == 0.8
+    assert song_a["feedback_confidence"] == 0.75
+    assert song_a["feedback_recency_score"] == 0.6
+    assert song_a["feedback_known_track_penalty"] == 0.1
+    assert song_a["feedback_diversity_penalty"] == 0.05
+    assert song_a["feedback_score_delta"] == 0.12
+    assert song_a["feedback_history_play_count"] == 2
+    assert song_a["feedback_is_catalog_backfill"] == 1.0
 
 
 if __name__ == "__main__":
