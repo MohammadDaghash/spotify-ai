@@ -19,6 +19,11 @@ export function buildRecommendationFeedbackFeatures(item = {}) {
       item.rawSimilarityScore ?? item.raw_similarity_score,
     ),
     qualityScore: safeNumber(item.qualityScore ?? item.quality_score),
+    heuristicScore: safeNumber(item.heuristicScore ?? item.heuristic_score),
+    mlLikeProbability: safeNumber(
+      item.mlLikeProbability ?? item.ml_like_probability,
+    ),
+    mlModelWeight: safeNumber(item.mlModelWeight ?? item.ml_model_weight),
     confidence: safeNumber(item.confidence),
     recencyScore: safeNumber(item.recencyScore ?? item.recency_score),
     knownTrackPenalty: safeNumber(

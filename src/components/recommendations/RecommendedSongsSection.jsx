@@ -49,6 +49,16 @@ function RecommendedSongsSection({
               signals={[
                 { label: "Model score", value: rec.score },
                 {
+                  label: "ML p(like)",
+                  value: rec.mlLikeProbability,
+                  tone: "blue",
+                },
+                {
+                  label: "Base score",
+                  value: rec.heuristicScore,
+                  tone: "amber",
+                },
+                {
                   label: "Similarity",
                   value: rec.similarityScore,
                   tone: "blue",

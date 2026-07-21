@@ -687,7 +687,6 @@ function Recommendations() {
         Number(track.streams || 0),
         getTrackPlayCount(trackName, artistName, trackDiscoveryPlayCounts),
       );
-
       return {
         ...track,
         trackName,
@@ -697,6 +696,8 @@ function Recommendations() {
         qualityScore: track.quality_score,
         confidence: track.confidence,
         recencyScore: track.recency_score,
+        heuristicScore: track.heuristic_score,
+        mlLikeProbability: track.ml_like_probability,
         diversityPenalty: track.diversity_penalty,
         knownTrackPenalty: track.known_track_penalty,
         recentListenStrength: track.recent_listen_strength,
@@ -962,7 +963,6 @@ function Recommendations() {
               saveArtistRecommendation={saveArtistRecommendation}
               savedArtists={savedArtists}
             />
-
             <FeedbackAnalyticsSection
               evaluationMetrics={evaluationMetrics}
               feedbackAnalytics={feedbackAnalytics}

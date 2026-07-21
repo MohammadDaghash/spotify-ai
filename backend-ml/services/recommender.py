@@ -3,6 +3,7 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import numpy as np
 
+from services.feedback_model import apply_feedback_model_blend
 from services.spotify_parser import explode_artist_credits, split_artist_names
 
 
@@ -37,6 +38,13 @@ def _weighted_average(vectors: np.ndarray, weights: np.ndarray) -> np.ndarray:
 
 def _calibrate_cosine_scores(scores: np.ndarray) -> np.ndarray:
     return np.clip((scores + 1) / 2, 0, 1)
+
+
+def _optional_float(value, digits: int = 3):
+    if pd.isna(value):
+        return None
+
+    return round(float(value), digits)
 
 
 def _normalize_track_key(track_name: str, artist_name: str = "") -> str:
@@ -328,6 +336,15 @@ def get_track_recommendations(
         - known_track_penalty.to_numpy()
     )
     final_scores = np.clip(final_scores, 0, 1)
+    confidence_scores = np.clip(
+        0.45 + calibrated_similarity_scores * 0.35
+        + (1 - track_features["skip_rate"]).to_numpy() * 0.2,
+        0,
+        1,
+    )
+    artist_stream_count = track_features.groupby("artist_name")[
+        "streams"
+    ].transform("sum")
 
     results = pd.DataFrame({
         "track_name": track_features["track_name"],
@@ -337,6 +354,7 @@ def get_track_recommendations(
         "raw_similarity_score": similarity_scores,
         "final_score": final_scores,
         "quality_score": quality_score,
+        "confidence": confidence_scores,
         "known_track_penalty": known_track_penalty,
         "streams": track_features["streams"],
         "minutes": track_features["total_minutes"],
@@ -344,8 +362,31 @@ def get_track_recommendations(
         "listen_strength": track_features["listen_strength"],
         "recent_listen_strength": track_features["recent_listen_strength"],
         "recency_score": track_features["recency_score"],
+        "completion_signal": track_features["completion_signal"],
+        "log_streams": track_features["log_streams"],
+        "log_total_minutes": track_features["log_total_minutes"],
+        "log_active_days": track_features["log_active_days"],
+        "log_listen_strength": track_features["log_listen_strength"],
+        "log_recent_listen_strength": track_features[
+            "log_recent_listen_strength"
+        ],
+        "track_play_count": track_features["streams"],
+        "artist_stream_count": artist_stream_count,
+        "log_track_play_count": np.log1p(track_features["streams"]),
+        "log_artist_stream_count": np.log1p(artist_stream_count),
+        "feedback_model_score": final_scores,
+        "feedback_relative_match_scaled": final_scores,
+        "feedback_similarity_score": calibrated_similarity_scores,
+        "feedback_quality_score": quality_score,
+        "feedback_confidence": confidence_scores,
+        "feedback_recency_score": track_features["recency_score"],
+        "feedback_known_track_penalty": known_track_penalty,
+        "feedback_diversity_penalty": 0,
+        "feedback_score_delta": 0,
+        "feedback_is_catalog_backfill": 0,
         "track_key": track_features["track_key"],
     })
+    results = apply_feedback_model_blend(results)
 
     results = results[~results["track_key"].isin(top_user_tracks)]
     results = results[~results["track_key"].isin(liked_track_keys)]
@@ -380,20 +421,14 @@ def get_track_recommendations(
             "artist_name": row["artist_name"],
             "album_name": row["album_name"],
             "score": round(float(row["final_score"]), 3),
+            "heuristic_score": round(float(row["heuristic_score"]), 3),
+            "ml_like_probability": _optional_float(row["ml_like_probability"]),
+            "ml_model_weight": round(float(row["ml_model_weight"]), 2),
+            "ml_model_version": row["ml_model_version"],
             "similarity_score": round(float(row["score"]), 3),
             "raw_similarity_score": round(float(row["raw_similarity_score"]), 3),
             "quality_score": round(float(row["quality_score"]), 3),
-            "confidence": round(
-                float(
-                    min(
-                        1,
-                        0.45
-                        + row["score"] * 0.35
-                        + (1 - row["skip_rate"]) * 0.2,
-                    )
-                ),
-                3,
-            ),
+            "confidence": round(float(row["confidence"]), 3),
             "diversity_penalty": round(float(row["diversity_penalty"]), 3),
             "known_track_penalty": round(float(row["known_track_penalty"]), 3),
             "streams": int(row["streams"]),

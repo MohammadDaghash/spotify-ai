@@ -22,6 +22,7 @@ from services.feedback_dataset import (
     FEEDBACK_SIGNAL_COLUMNS,
     build_real_feedback_training_frame,
 )
+from services.feedback_model import DEFAULT_MODEL_PATH
 from services.recommender import build_track_features
 from services.spotify_parser import load_combined_spotify_history
 
@@ -688,6 +689,45 @@ def print_experiment_report(results: dict, top_n: int = 8) -> None:
     )
 
 
+def save_feedback_model_artifact(results: dict, output_path: str) -> dict:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    artifact = {
+        "version": 1,
+        "model_type": "manual_logistic_regression",
+        "created_at": pd.Timestamp.now(tz="UTC").isoformat(),
+        "label_source": results["label_source"],
+        "feature_columns": FEATURE_COLUMNS,
+        "weights": results["weights"].tolist(),
+        "bias": float(results["bias"]),
+        "means": results["means"].tolist(),
+        "standard_deviations": results["standard_deviations"].tolist(),
+        "default_blend_weight": 0.3,
+        "training": {
+            "x_shape": list(results["x_shape"]),
+            "y_shape": list(results["y_shape"]),
+            "label_counts": results["label_counts"],
+            "label_source_counts": results["label_source_counts"],
+            "sample_weight_by_source": results["sample_weight_by_source"],
+            "train_accuracy": float(results["train_accuracy"]),
+            "test_accuracy": float(results["test_accuracy"]),
+            "train_log_loss": float(results["train_log_loss"]),
+            "test_log_loss": float(results["test_log_loss"]),
+            "sklearn_test_accuracy": float(results["sklearn_test_accuracy"]),
+            "sklearn_test_log_loss": float(results["sklearn_test_log_loss"]),
+        },
+    }
+
+    path.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
+
+    return {
+        "output_path": str(path),
+        "feature_count": len(FEATURE_COLUMNS),
+        "label_source": artifact["label_source"],
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train a visible NumPy logistic regression model from Spotify listening history.",
@@ -720,6 +760,14 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1000,
         help="Maximum feedback events to export from the app before training.",
+    )
+    parser.add_argument(
+        "--model-output",
+        default="",
+        help=(
+            "Optional path for the saved logistic model artifact. "
+            f"Recommended: {DEFAULT_MODEL_PATH.relative_to(BACKEND_DIR)}."
+        ),
     )
     parser.add_argument(
         "--real-feedback-weight",
@@ -775,6 +823,13 @@ def main() -> None:
         raise SystemExit(f"\nExperiment stopped:\n{error}") from error
 
     print_experiment_report(results)
+
+    if args.model_output:
+        save_result = save_feedback_model_artifact(results, args.model_output)
+        print("\nSaved model artifact:")
+        print(f"output: {save_result['output_path']}")
+        print(f"features: {save_result['feature_count']}")
+        print(f"label source: {save_result['label_source']}")
 
 
 if __name__ == "__main__":

@@ -169,8 +169,26 @@ source venv/bin/activate
 python experiments/feedback_logistic_regression.py \
   --label-source hybrid \
   --export-feedback-url https://spotify-ai-sooty.vercel.app \
-  --feedback-path data/feedback/events.json
+  --feedback-path data/feedback/events.json \
+  --model-output models/feedback_logistic_regression.json
 ```
+
+The saved model artifact contains only model parameters:
+
+```text
+feature_columns, weights, bias, means, standard_deviations
+```
+
+`backend-ml/services/recommender.py` loads that artifact for track
+recommendations and blends the existing recommendation score with the learned
+probability:
+
+```text
+final_score = 0.7 * existing_score + 0.3 * p(like)
+```
+
+The API response exposes both `heuristic_score` and `ml_like_probability`, so
+the UI can show how much the learned model affected the result.
 
 `data/feedback/events.json` can be either:
 
