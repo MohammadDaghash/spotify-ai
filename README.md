@@ -113,6 +113,7 @@ npm run dev
 ```bash
 cd backend-ml
 source venv/bin/activate
+python -m pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
 ```
 
@@ -157,16 +158,17 @@ knownness (`track_play_count`, `artist_stream_count`), and recommendation
 signals captured from feedback events (`similarity`, `quality`, `confidence`,
 known-item penalties, feedback score delta, and catalog-fallback source).
 
-When enough real Supabase Like/Ignore events exist, this same experiment can
-switch from proxy labels to real feedback labels:
+When enough real Like/Ignore events exist, this same experiment can use the
+latest feedback exported from the public app. The practical default is hybrid
+mode: listening behavior creates proxy labels, and real Like/Ignore feedback
+overrides those labels with higher sample weight.
 
 ```bash
-npm run export:feedback-python
-
 cd backend-ml
 source venv/bin/activate
 python experiments/feedback_logistic_regression.py \
-  --label-source feedback \
+  --label-source hybrid \
+  --export-feedback-url https://spotify-ai-sooty.vercel.app \
   --feedback-path data/feedback/events.json
 ```
 
@@ -175,9 +177,20 @@ python experiments/feedback_logistic_regression.py \
 - the JSON response exported by `npm run export:feedback-python`
 - an exported Supabase `user_feedback_events` JSON/CSV file
 
-The real-feedback mode is intentionally strict: it needs both positive and
-negative labels before training, so it will ask for more Like/Ignore examples
-instead of silently falling back to proxy labels.
+Use `--label-source feedback` only when you want strict real-feedback training.
+That mode needs both positive and negative labels before training, so it will
+ask for more Like/Ignore examples instead of silently falling back to proxy
+labels.
+
+Hybrid training uses weighted logistic regression:
+
+```text
+real Like/Ignore rows: sample_weight = 5
+proxy listening rows: sample_weight = 1
+```
+
+That means your explicit feedback affects the learned weights more than inferred
+behavior, while the model still has enough rows to train early in the project.
 
 ### Spotify Login
 
